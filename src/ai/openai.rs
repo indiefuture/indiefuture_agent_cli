@@ -237,6 +237,7 @@ impl AiClient for OpenAiClient {
                         //    "max_completion_tokens": 8000,  // Ensure enough tokens for multiple tool calls
 
                             "tools": function_tools,
+                            "parallel_tool_calls": true , 
                             
                         }),
 

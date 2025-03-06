@@ -115,7 +115,7 @@ impl AgentEngine {
 
 		 shared_state: Arc<SharedState>, 
 		 context_memory: Arc< Mutex<ContextMemory>  >,
-		settings: Arc<Settings> 
+		 settings: Arc<Settings> 
 
 		){
 

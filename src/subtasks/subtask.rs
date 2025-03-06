@@ -29,6 +29,9 @@ pub trait SubtaskTool {
 /// Represents the type of subtask to perform
 #[derive(Debug, Clone)]
 pub enum SubTaskType {
+
+    ProtoSubtask (String), // can be converted to an actual subtask 
+
     Task(String),
     
     
@@ -51,6 +54,9 @@ impl SubTaskType {
     pub fn get_tool(&self) -> Arc<dyn SubtaskTool> {
         match self {
             Self::Task(query) => Arc::new(TaskTool(query.to_string())),
+
+
+            Self::ProtoSubtask(query) => Arc::new(ProtoSubtask(query.to_string())),
 
             Self::FileReadTool(input) => Arc::new(FileReadTool(input.clone())),
 
@@ -306,6 +312,7 @@ impl SubTaskType {
             SubTaskType::GlobTool(inputs) => format!("Glob Search: {}", inputs.pattern),
             SubTaskType::GrepTool(inputs) => format!("Grep Search: {}", inputs.pattern),
             SubTaskType::ExplainTool(query) => format!("Explain: {}", query),
+            SubTaskType::ProtoSubtask(query) => format!("Proto: {}", query),
         }
     }
     
@@ -319,6 +326,7 @@ impl SubTaskType {
             SubTaskType::GlobTool(_) => "🔍",
             SubTaskType::GrepTool(_) => "🔎",
             SubTaskType::ExplainTool(_) => "💡",
+            SubTaskType::ProtoSubtask(_) => "🔄",
         }
     }
 
@@ -430,6 +438,14 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
 
 
 
+
+
+
+
+
+
+
+
          let secondary_input_messages = vec![
              Message {
                 role: MessageRole::System,
@@ -443,10 +459,49 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
             },
          ];   
 
+
+         let secondary_functions = json!( 
+ 
+
+           [
+                {
+                  "name": "AddSubtasks",
+                  "description": "Provides an explanation to the user using accumulated context from previous tools. Use this as the final step after gathering information with other tools like GlobTool, GrepTool, and FileReadTool.",
+                  "parameters": {
+                    "type": "object",
+                    "properties": {
+                      "subtasks": {
+                        "type": "array",
+                        "description": "Array of subtask items to add",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "description": {
+                              "type": "string",
+                              "description": "Description of the subtask"
+                            },
+                            "priority": {
+                              "type": "string",
+                              "enum": ["high", "medium", "low"],
+                              "description": "Priority level of the subtask"
+                            }
+                          },
+                          "required": ["description"]
+                        }
+                      }
+                    },
+                    "required": ["subtasks"]
+                  }
+                }
+              ]
+
+
+         ) ;
+
          println!("secondary input messages {:?}", secondary_input_messages);
 
         let secondary_response = match ai_client
-            .chat_completion_with_functions( secondary_input_messages ,  functions.clone(), false )
+            .chat_completion_with_functions( secondary_input_messages ,  secondary_functions.clone(), false )
             .await {
                 Ok(resp) => resp,
                 Err(e) => {
@@ -473,8 +528,30 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
             return None;
         }
 
+
+
+
+        let mut proto_subtasks = Vec::new();
+        for tool_call in tool_calls {
+
+            proto_subtasks.push(  ProtoSubtask ( tool_call.function.arguments.to_string()   )     ) ;
+
+        }
+
+
+
+
+
+          Some( SubtaskOutput::PushSubtasks( 
+          
+              proto_subtasks .iter().map( |x|  SubTaskType::ProtoSubtask( x.0 .clone() ) ).collect()
+
+             )  ) 
+
+
+
         // Convert tool calls to subtasks
-        let mut built_sub_tasks = Vec::new();
+       /* let mut built_sub_tasks = Vec::new();
         for tool_call in &tool_calls {
             println!("Processing tool call: {:?}", tool_call);
 
@@ -495,12 +572,109 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
             println!("WARN: No valid subtasks created from tool calls");
             None
         }
+        */
     }
 }
 
 
 
 
+
+ 
+
+//use ai and context to convert this to a 'hard type' subtask 
+
+ pub struct ProtoSubtask(String);  //query 
+ 
+#[async_trait] 
+impl SubtaskTool for ProtoSubtask {
+    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient>, _context_memory: Arc<Mutex<ContextMemory>>) -> Option<SubtaskOutput> {
+        let input = &self.0;
+
+
+
+
+
+        let system_prompt = r#"
+You are an expert AI assistant for a command-line tool that helps with software development tasks of a local codebase.
+Your job is to analyze user requests and determine what operations the command-line tool should  perform.
+
+IMPORTANT: You MUST recommend multiple tools (at least 2-3) to complete the task in a step-by-step fashion. 
+Break down complex tasks into a sequence of simpler operations using different tools in the optimal order.
+
+SUGGESTED WORKFLOW PATTERN:
+1. Use search tools (GlobTool, GrepTool) to find relevant files
+2. Use FileReadTool to examine the contents of those files
+3. Use ExplainTool as a final step to provide an explanation using all the gathered context
+
+For example, if asked to "explain the logging system in this codebase", you should recommend:
+1. First use GlobTool to find all source files
+2. Then use GrepTool to search for "log" or "logger" patterns in those files
+3. Use FileReadTool to examine the most relevant files in detail
+4. Finally use ExplainTool to provide a comprehensive explanation based on all gathered information
+
+
+Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer based on all gathered information.
+"#;
+
+        // Load function schema from JSON file
+        let functions_json = include_str!("schemas/task_functions.json");
+        let functions: serde_json::Value = serde_json::from_str(functions_json)
+            .expect("Failed to parse task_functions.json");
+
+        // Create messages for the AI
+        let messages = vec![
+            Message {
+                role: MessageRole::System,
+                content: system_prompt.to_string(),
+                name: None,
+            },
+            Message {
+                role: MessageRole::User,
+                content: input.to_string(),
+                name: None,
+            },
+        ];
+
+        // Call AI with function calling enabled
+        let best_function_response = match ai_client
+            .chat_completion_with_functions(messages, functions.clone(), false )
+            .await {
+                Ok(resp) => resp,
+                Err(e) => {
+                    println!("WARN: Failed to get chat completion: {:?}", e);
+                    return None;
+                },  
+            };
+
+
+       let Some(tool_calls) = best_function_response.tool_calls else {
+            println!("WARN: No tool calls chosen by AI");
+            return None;
+        };
+
+        if tool_calls.is_empty() {
+            println!("WARN: Empty tool calls list");
+            return None;
+        }
+
+
+        let mut built_sub_tasks = Vec::new() ; 
+
+          for tool_call in &tool_calls {
+            println!("Processing tool call: {:?}", tool_call);
+
+            if let Some(sub_task_type) = SubTaskType::from_tool_call(tool_call.clone()) {
+                built_sub_tasks.push(sub_task_type);
+            }
+        }
+        
+
+         Some(SubtaskOutput::PushSubtasks(built_sub_tasks))
+
+
+    }
+}
 
 
 

@@ -79,7 +79,6 @@ impl PromptBuilder {
         let system_message = Message {
             role: MessageRole::System,
             content: self.system_message.clone(),
-            name: None,
         };
         
         // Sort contexts by relevance score
@@ -107,13 +106,11 @@ impl PromptBuilder {
                     "Use the following context to answer my question:\n{}\n\nMy question is: {}",
                     context_string, self.user_query
                 ),
-                name: None,
             }
         } else {
             Message {
                 role: MessageRole::User,
                 content: self.user_query.clone(),
-                name: None,
             }
         };
         

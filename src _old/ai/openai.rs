@@ -1,4 +1,4 @@
-use crate::ai::{AiClient, Message, MessageRole, ChatCompletionResponse, FunctionCall};
+use crate::ai::{AiClient, Message, MessageRole};
 use crate::error::{AgentError, AgentResult};
 use async_trait::async_trait;
 use reqwest::{Client, header};
@@ -22,15 +22,13 @@ struct OpenAiCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     functions: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    function_call: Option<Value>,
+    function_call: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
 struct OpenAiMessage {
     role: String,
     content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,7 +44,7 @@ struct OpenAiChoice {
 #[derive(Debug, Deserialize)]
 struct OpenAiResponseMessage {
     #[serde(default)]
-    content: Option<String>,
+    content: String,
     #[serde(default)]
     function_call: Option<OpenAiFunctionCall>,
 }
@@ -108,7 +106,6 @@ impl AiClient for OpenAiClient {
             .map(|m| OpenAiMessage {
                 role: m.role.to_string(),
                 content: m.content,
-                name: m.name,
             })
             .collect();
         
@@ -148,22 +145,24 @@ impl AiClient for OpenAiClient {
             return Err(AgentError::AiApi("OpenAI API returned no choices".to_string()));
         }
         
-        Ok(response_data.choices[0].message.content.clone().unwrap_or_default())
+        Ok(response_data.choices[0].message.content.clone())
     }
     
-    async fn chat_completion_with_functions(
-        &self, 
+    async fn generate_text_with_functions(
+        &self,
         messages: Vec<Message>, 
-        functions: Value
-    ) -> AgentResult<ChatCompletionResponse> {
+        functions: Value,
+        function_call: Option<&str>
+    ) -> AgentResult<Value> {
         let api_messages: Vec<OpenAiMessage> = messages
             .into_iter()
             .map(|m| OpenAiMessage {
                 role: m.role.to_string(),
                 content: m.content,
-                name: m.name,
             })
             .collect();
+        
+        let function_call_str = function_call.map(|s| s.to_string());
         
         let request = OpenAiCompletionRequest {
             model: self.model.clone(),
@@ -171,7 +170,7 @@ impl AiClient for OpenAiClient {
             temperature: 0.7,
             max_tokens: Some(4000),
             functions: Some(functions),
-            function_call: Some(json!("auto")),
+            function_call: function_call_str,
         };
         
         let response = self
@@ -203,22 +202,27 @@ impl AiClient for OpenAiClient {
         
         let message = &response_data.choices[0].message;
         
-        let result = if let Some(function_call) = &message.function_call {
-            ChatCompletionResponse {
-                content: message.content.clone(),
-                function_call: Some(FunctionCall {
-                    name: function_call.name.clone(),
-                    arguments: function_call.arguments.clone(),
-                }),
-            }
+        if let Some(function_call) = &message.function_call {
+            // Parse the function call arguments as JSON
+            let arguments = match serde_json::from_str::<Value>(&function_call.arguments) {
+                Ok(args) => args,
+                Err(e) => return Err(AgentError::AiApi(format!("Failed to parse function arguments: {}", e))),
+            };
+            
+            // Return a structured JSON response
+            Ok(json!({
+                "function_calls": [{
+                    "name": function_call.name,
+                    "arguments": arguments
+                }]
+            }))
         } else {
-            ChatCompletionResponse {
-                content: message.content.clone(),
-                function_call: None,
-            }
-        };
-        
-        Ok(result)
+            // No function call, just return the content
+            Ok(json!({
+                "content": message.content,
+                "function_calls": []
+            }))
+        }
     }
     
     async fn generate_embeddings(&self, text: &str) -> AgentResult<Vec<f32>> {

@@ -152,15 +152,23 @@ impl TaskDecomposer {
         // Create a parent task ID
         let parent_id = utils::generate_id();
         
-        // Direct cargo commands don't need decomposition
-        if task_lower.contains("cargo check") || 
-           task_lower.contains("cargo build") || 
-           task_lower.contains("cargo run") || 
-           task_lower.contains("cargo test") ||
-           task_lower.contains("cargo fmt") ||
-           task_lower.contains("cargo clippy") {
+        // Extract the exact command the user wants to run
+        let direct_command = if task_lower.trim() == "cargo check" || 
+                               task_lower.trim() == "cargo build" ||
+                               task_lower.trim() == "cargo run" ||
+                               task_lower.trim() == "cargo test" ||
+                               task_lower.trim() == "cargo fmt" ||
+                               task_lower.trim() == "cargo clippy" {
+            // If it's just the exact command, use it directly
+            task_lower.trim().to_string()
+        } else if task_lower.contains("cargo check") || 
+                  task_lower.contains("cargo build") || 
+                  task_lower.contains("cargo run") || 
+                  task_lower.contains("cargo test") ||
+                  task_lower.contains("cargo fmt") ||
+                  task_lower.contains("cargo clippy") {
             
-            // Extract the command
+            // Extract the command from text
             let command = if task_lower.contains("cargo check") {
                 "cargo check"
             } else if task_lower.contains("cargo build") {
@@ -176,36 +184,41 @@ impl TaskDecomposer {
             } else {
                 return None;
             };
+            command.to_string()
+        } else {
+            return None;
+        };
             
-            // Create main task
-            let main_task = Task::new(
-                parent_id.clone(),
-                task_description.to_string(),
-                None,
-                Vec::new(),
-                self.default_timeout,
-                1,
-            ).with_operation(OperationType::TASK);
-            
-            // Create the BASH task
-            let bash_task = Task::new(
-                utils::generate_id(),
-                format!("Execute command: {}", command),
-                Some(parent_id.clone()),
-                Vec::new(),
-                self.default_timeout,
-                1,
-            ).with_operation(OperationType::BASH);
-            
-            // Return the tasks
-            return Some(vec![main_task, bash_task]);
-        }
+        // Create main task
+        let main_task = Task::new(
+            parent_id.clone(),
+            task_description.to_string(),
+            None,
+            Vec::new(),
+            self.default_timeout,
+            1,
+        ).with_operation(OperationType::TASK);
         
-        // Other kinds of simple tasks could be handled here
+        // Create exactly one BASH task with the extracted command
+        let bash_task = Task::new(
+            utils::generate_id(),
+            format!("Execute command: {}", direct_command),
+            Some(parent_id.clone()),
+            Vec::new(),
+            self.default_timeout,
+            1,
+        ).with_operation(OperationType::BASH);
         
-        // Not a simple task
-        None
-    }
+        log::info!("🧠 Detected simple command: {}", direct_command);
+        
+        // Return just the main task and a single BASH task
+        return Some(vec![main_task, bash_task]);
+    
+    // Other kinds of simple tasks could be handled here
+    
+    // Not a simple task
+    None
+}
     
     /// Parse function calls from AI response into Task objects
     fn parse_function_calls(

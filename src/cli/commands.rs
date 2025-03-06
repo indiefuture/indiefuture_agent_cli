@@ -1,7 +1,7 @@
 use cliclack::{self, spinner, confirm, log};
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -11,8 +11,11 @@ use crate::codebase::CodebaseScanner;
 use crate::config::Settings;
 use crate::error::{AgentError, AgentResult};
 use crate::memory::{MemoryManager, ShortTermMemory, VectorStore};
-use crate::storage::SledStore;
-use crate::task::{OperationType, Task, TaskDecomposer, TaskExecutor, TaskStatus};
+use crate::task::{
+    SubTask, SubTaskType, SubTaskQueueManager, SubTaskExecutor,
+    // Legacy imports
+    OperationType, Task, TaskDecomposer, TaskExecutor, TaskStatus
+};
 
 /// Execute a CLI command
 pub async fn execute_command(command: &str, args: &str, settings: Arc<Settings>) -> AgentResult<()> {
@@ -24,6 +27,13 @@ pub async fn execute_command(command: &str, args: &str, settings: Arc<Settings>)
     }
 }
 
+/// Add a subtask to the queue
+pub fn add_queued_subtask(subtask: SubTask) -> AgentResult<()> {
+    let queue_manager = SubTaskQueueManager::global();
+    queue_manager.add_queued_subtask(subtask);
+    Ok(())
+}
+
 /// Execute a complex task by breaking it down and handling subtasks
 async fn execute_task(task_description: &str, settings: Arc<Settings>) -> AgentResult<()> {
     // Initialize components
@@ -33,211 +43,84 @@ async fn execute_task(task_description: &str, settings: Arc<Settings>) -> AgentR
         settings.openai_api_key.as_deref().unwrap_or(""),
     )?;
     
-    // Initialize vector store
-    let vector_store = VectorStore::new(settings.vector_store_path.to_str().unwrap_or("."), &settings.collection_name).await;
-    
-    // Initialize short-term memory
-    let short_term_memory = ShortTermMemory::new(None);
-    
-    // Create memory manager
-    let memory_manager = Arc::new(MemoryManager::new(short_term_memory, vector_store));
-    
-    // Create codebase scanner
-    let codebase_scanner = Arc::new(CodebaseScanner::new(
-        &settings.default_scan_path,
-        settings.ignore_patterns.clone(),
-        settings.supported_extensions.clone(),
-    ));
-    
-    // Create task decomposer
-    let decomposer = TaskDecomposer::new(
-        ai_client.clone_box(),
-        settings.default_timeout_seconds,
-    );
-    
-    // Show spinner while decomposing the task
-    log::info("🔄 Breaking down task into subtasks...").expect("Failed to log");
-    let mut spin = spinner();
-    spin.start("Analyzing task requirements...");
-    
-    // Decompose the task into subtasks and mark the main task as a TASK operation
-    let mut tasks = decomposer.decompose(task_description).await?;
-    
-    // The first task should already be marked as a TASK operation in the decomposer
-    if let Some(task) = tasks.first() {
-        log::info(&format!("Created main TASK with ID: {}", task.id)).expect("Failed to log");
-    }
-    
-    spin.stop("Task breakdown completed ✓");
-    
-    // Create a progress bar for task execution
-    let total_tasks = tasks.len() as u64;
-    let pb = ProgressBar::new(total_tasks);
-    let pb_clone = pb.clone();
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} {wide_msg}")
-            .expect("Failed to set progress bar style")
-            .progress_chars("█▓▒░"),
-    );
-    
-    // Display the task breakdown with nicer formatting
-    let parent_task = tasks.first().expect("No parent task found");
-    // Get parent task operation icon
-    let parent_icon = match &parent_task.operation_type {
-        Some(op_type) => op_type.icon(),
-        None => "📋",
-    };
-    
-    log::info(&format!("{} Main task: {}", parent_icon, parent_task.description)).expect("Failed to log");
-    println!();
-    log::info("✅ Task successfully broken down into the following subtasks:").expect("Failed to log");
-    
-    for (i, task) in tasks.iter().skip(1).enumerate() {
-        // Get operation icon based on operation type
-        let op_icon = match &task.operation_type {
-            Some(op_type) => op_type.icon(),
-            None => "➡️",
-        };
-        
-        log::info(&format!(" {}. {} {}", style(i + 1).bold(), op_icon, task.description)).expect("Failed to log");
-    }
-    println!();
-    
-    // Create task executor with the workspace root
-    let mut executor = TaskExecutor::new(
-        memory_manager.clone(),
-        ai_client.clone_box(),
-        codebase_scanner.clone(),
-        settings.default_scan_path.clone(), // Use the scan path as workspace root
-        settings.max_concurrent_tasks,
-    );
-    
-    // Set up the status callback to update the progress bar
-    executor.set_status_callback(Box::new(move |task: &Task| {
-        match task.status {
-            TaskStatus::Completed => {
-                pb_clone.inc(1);
-                pb_clone.set_message(format!("Completed: {}", task.description));
-            }
-            TaskStatus::Failed => {
-                pb_clone.set_message(format!("Failed: {}", task.description));
-            }
-            TaskStatus::InProgress => {
-                pb_clone.set_message(format!("In progress: {}", task.description));
-            }
-            _ => {}
-        }
-    }));
+    // Create subtask executor
+    let mut subtask_executor = SubTaskExecutor::new(ai_client.clone_box());
     
     // Set up the user confirmation callback
-    executor.set_user_confirmation_callback(Box::new(|tool: &str, command: &str| {
-        // Get confirmation from the user - one at a time
+    subtask_executor.set_user_confirmation_callback(Box::new(|subtask: &SubTask| {
+        // Get confirmation from the user
         println!("\n");
         
-        if tool == "question" {
-            log::info(&format!("AI is asking for your decision:\n{}", command)).expect("Failed to log");
-            let result = confirm("Continue with this step?")
-                .initial_value(true)
-                .interact()
-                .unwrap_or(false);
-                
-            if result {
-                log::info("✓ Continuing with the next step").expect("Failed to log");
-            } else {
-                log::info("⨯ Stopping execution").expect("Failed to log");
-            }
-            result
-        } else {
-            // Tool execution
-            if tool == "bash" {
-                log::info(&format!("🔧 AI wants to run command: {}", style(command).bold().cyan())).expect("Failed to log");
-            } else {
-                log::info(&format!("🔧 AI wants to use tool: {}", style(tool).bold())).expect("Failed to log");
-                log::info(&format!("  Command: {}", command)).expect("Failed to log");
-            }
+        log::info(&format!("{} AI wants to execute subtask:", 
+            subtask.subtask_type.icon()
+        )).expect("Failed to log");
+        
+        log::info(&format!("  {}", subtask.subtask_type.description())).expect("Failed to log");
+        
+        let result = confirm("Allow this operation?")
+            .initial_value(true)
+            .interact()
+            .unwrap_or(false);
             
-            let result = confirm("Allow this operation?")
-                .initial_value(true)
-                .interact()
-                .unwrap_or(false);
-                
-            if result {
-                log::info("✓ Operation approved").expect("Failed to log");
-            } else {
-                log::info("⨯ Operation declined").expect("Failed to log");
-            }
-            result
+        if result {
+            log::info("✓ Operation approved").expect("Failed to log");
+        } else {
+            log::info("⨯ Operation declined").expect("Failed to log");
         }
+        result
     }));
     
-    // Queue the tasks for execution
-    executor.queue_tasks(tasks)?;
+    // Process user input to generate subtasks
+    log::info("🔄 Analyzing task...").expect("Failed to log");
+    let spin = spinner();
+    spin.start("Processing task...");
     
-    // Ask for confirmation before executing tasks
-    println!();
-    let confirmed = confirm("Do you want to execute these subtasks?")
-        .initial_value(true)
-        .interact()
-        .unwrap_or(false);
+    // Process the user input and generate subtasks
+    subtask_executor.process_user_input(task_description).await?;
+    
+    spin.stop("Task analyzed ✓");
+    
+    // Display the queue status
+    let queue_manager = SubTaskQueueManager::global();
+    let queue_size = queue_manager.queue_length();
+    
+    if queue_size > 0 {
+        log::info(&format!("🔍 Generated {} subtasks", queue_size)).expect("Failed to log");
         
-    if confirmed {
-            // Execute all tasks
-            log::info("▶️ Executing tasks...").expect("Failed to log");
-            let task_results = executor.execute_tasks().await?;
+        // List the subtasks in the queue
+        let subtasks = queue_manager.list_subtasks();
+        println!();
+        log::info("📋 Subtasks:").expect("Failed to log");
+        
+        for (i, subtask) in subtasks.iter().enumerate() {
+            log::info(&format!(" {}. {} {}", 
+                style(i + 1).bold(), 
+                subtask.subtask_type.icon(),
+                subtask.subtask_type.description()
+            )).expect("Failed to log");
+        }
+        
+        // Ask for confirmation before executing tasks
+        println!();
+        let confirmed = confirm("Do you want to execute these subtasks?")
+            .initial_value(true)
+            .interact()
+            .unwrap_or(false);
             
-            // Finish the progress bar
-            pb.finish_with_message("✨ All tasks completed");
+        if confirmed {
+            // Process all subtasks in the queue
+            log::info("▶️ Executing subtasks...").expect("Failed to log");
+            subtask_executor.process_all_subtasks().await?;
             
             // Display the results
             println!();
             log::info("🎉 Task execution complete!").expect("Failed to log");
-            
-            // Find the parent task result
-            if let Some(parent) = task_results.values().find(|t| t.parent_id.is_none()) {
-                if let Some(result) = &parent.result {
-                    log::info("🔍 Final result:").expect("Failed to log");
-                    println!();
-                    
-                    // Print the result with a nice box around it
-                    let width = 100;
-                    let separator = "─".repeat(width);
-                    println!("┌{}┐", separator);
-                    
-                    // Split the result into lines and print with box borders
-                    for line in result.lines() {
-                        println!("│ {:<width$} │", line, width=width-2);
-                    }
-                    
-                    println!("└{}┘", separator);
-                }
-                
-                // Print a summary of completed subtasks with their operation types
-                let completed_subtasks: Vec<_> = task_results.values()
-                    .filter(|t| t.parent_id.is_some() && t.status == TaskStatus::Completed)
-                    .collect();
-                
-                if !completed_subtasks.is_empty() {
-                    println!();
-                    log::info("📊 Completed subtasks summary:").expect("Failed to log");
-                    
-                    for (i, task) in completed_subtasks.iter().enumerate() {
-                        // Get operation icon based on operation type
-                        let op_icon = match &task.operation_type {
-                            Some(op_type) => op_type.icon(),
-                            None => "✅",
-                        };
-                        
-                        log::info(&format!(" {}. {} {}", i + 1, op_icon, task.description))
-                            .expect("Failed to log");
-                    }
-                }
-            }
+        } else {
+            // User cancelled task execution
+            log::info("⨯ Task execution cancelled by user").expect("Failed to log");
+        }
     } else {
-        // User cancelled task execution
-        log::info("⨯ Task execution cancelled by user").expect("Failed to log");
-        pb.finish_with_message("❌ Task execution cancelled");
-        return Ok(());
+        log::info("⚠️ No subtasks were generated").expect("Failed to log");
     }
     
     Ok(())

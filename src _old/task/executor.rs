@@ -88,6 +88,103 @@ impl TaskExecutor {
             tools: Arc::new(tools),
         }
     }
+    
+    /// Generate a unique key for task deduplication based on operation type and description
+    fn get_deduplication_key(&self, task: &Task) -> String {
+        // Get operation type as string
+        let op_type = match &task.operation_type {
+            Some(op) => format!("{:?}", op),
+            None => "UNKNOWN".to_string(),
+        };
+        
+        // Normalize description:
+        // - Convert to lowercase
+        // - Remove punctuation
+        // - Remove extra whitespace
+        // - For specific operations, extract key information
+        
+        let normalized_desc = match &task.operation_type {
+            Some(OperationType::READ) => {
+                // For READ tasks, extract the file path if possible
+                if task.description.contains("Read and analyze file:") {
+                    let file_path = task.description
+                        .replace("Read and analyze file:", "")
+                        .trim()
+                        .to_lowercase();
+                    format!("READ:{}", file_path)
+                } else {
+                    // Try to extract file path by looking for patterns like "file" or "read"
+                    let desc_lower = task.description.to_lowercase();
+                    if desc_lower.contains("file") || desc_lower.contains("read") {
+                        let words: Vec<&str> = desc_lower.split_whitespace().collect();
+                        if words.len() > 2 {
+                            // Use only the key parts to avoid false duplication
+                            words.join(" ")
+                        } else {
+                            desc_lower
+                        }
+                    } else {
+                        desc_lower
+                    }
+                }
+            },
+            Some(OperationType::SEARCH) => {
+                // For SEARCH tasks, normalize the query
+                let desc_lower = task.description.to_lowercase();
+                if desc_lower.contains("search for:") {
+                    let query = desc_lower
+                        .replace("search for:", "")
+                        .trim()
+                        .to_string();
+                    format!("SEARCH:{}", query)
+                } else {
+                    desc_lower
+                }
+            },
+            Some(OperationType::UPDATE) => {
+                // For UPDATE tasks, extract the file path
+                if task.description.contains("Update file") {
+                    let parts: Vec<&str> = task.description.splitn(2, ":").collect();
+                    if parts.len() >= 2 {
+                        let file_path = parts[0].replace("Update file", "").trim().to_lowercase();
+                        format!("UPDATE:{}", file_path)
+                    } else {
+                        task.description.to_lowercase()
+                    }
+                } else {
+                    task.description.to_lowercase()
+                }
+            },
+            Some(OperationType::TASK) => {
+                // For TASK operations, more aggressive normalization to catch similar tasks
+                let desc_lower = task.description.to_lowercase();
+                
+                // Remove common words and punctuation
+                let common_words = ["a", "the", "and", "or", "to", "in", "for", "with", "this", "that"];
+                let mut normalized = desc_lower
+                    .replace(|c: char| !c.is_alphanumeric() && !c.is_whitespace(), "");
+                    
+                for word in &common_words {
+                    normalized = normalized.replace(&format!(" {} ", word), " ");
+                }
+                
+                // Normalize whitespace
+                let normalized = normalized
+                    .split_whitespace()
+                    .collect::<Vec<&str>>()
+                    .join(" ");
+                
+                format!("TASK:{}", normalized)
+            },
+            _ => {
+                // Default normalization for other operation types
+                task.description.to_lowercase().trim().to_string()
+            }
+        };
+        
+        // Combine operation type and normalized description
+        format!("{}:{}", op_type, normalized_desc)
+    }
 
     /// Set a callback function to receive task status updates
     pub fn set_status_callback(&mut self, callback: TaskStatusCallback) {
@@ -109,35 +206,84 @@ impl TaskExecutor {
             AgentError::TaskExecution(format!("Failed to lock task map: {}", e))
         })?;
 
-        // Map to store seen descriptions for deduplication
-        let mut seen_descriptions = std::collections::HashMap::new();
+        // Maps to store seen tasks for deduplication
+        let mut seen_descriptions = std::collections::HashMap::<String, String>::new();
+        let mut seen_operations = std::collections::HashMap::<String, String>::new();
         let mut dupes_removed = 0;
+        
+        // First, build a map of existing tasks for checking duplicates
+        for existing_task in task_queue.iter() {
+            let key = self.get_deduplication_key(existing_task);
+            seen_operations.insert(key, existing_task.id.clone());
+            
+            // For BASH tasks, also track the command specifically
+            if let Some(OperationType::BASH) = &existing_task.operation_type {
+                let command = if existing_task.description.contains("Execute command:") {
+                    existing_task.description.replace("Execute command:", "").trim().to_string()
+                } else {
+                    existing_task.description.clone()
+                };
+                seen_descriptions.insert(command, existing_task.id.clone());
+            }
+        }
         
         // Add tasks to the queue and map (with deduplication)
         for task in tasks {
-            // For BASH tasks, deduplicate based on description
-            if let Some(op_type) = &task.operation_type {
-                if *op_type == OperationType::BASH {
-                    // Extract command from description if possible
-                    let command = if task.description.contains("Execute command:") {
-                        task.description.replace("Execute command:", "").trim().to_string()
-                    } else {
-                        task.description.clone()
-                    };
-                    
-                    // Skip if we've seen this command before
-                    if let Some(existing_id) = seen_descriptions.get(&command) {
-                        // Check if the existing task is the parent task
-                        if task.parent_id.as_deref() != Some(existing_id) {
-                            log::info!("🔍 Skipping duplicate BASH task: {}", command);
-                            dupes_removed += 1;
-                            continue;
+            let is_duplicate = if let Some(op_type) = &task.operation_type {
+                match op_type {
+                    // For BASH tasks, deduplicate based on command
+                    OperationType::BASH => {
+                        let command = if task.description.contains("Execute command:") {
+                            task.description.replace("Execute command:", "").trim().to_string()
+                        } else {
+                            task.description.clone()
+                        };
+                        
+                        // Skip if we've seen this command before
+                        if let Some(existing_id) = seen_descriptions.get(&command) {
+                            // Check if the existing task is the parent task
+                            if task.parent_id.as_deref() != Some(existing_id) {
+                                log::info!("🔍 Skipping duplicate BASH task: {}", command);
+                                true
+                            } else {
+                                seen_descriptions.insert(command, task.id.clone());
+                                false
+                            }
+                        } else {
+                            seen_descriptions.insert(command, task.id.clone());
+                            false
+                        }
+                    },
+                    // For all other operations, deduplicate based on operation type + normalized description
+                    _ => {
+                        let dedup_key = self.get_deduplication_key(&task);
+                        
+                        if let Some(existing_id) = seen_operations.get(&dedup_key) {
+                            // Don't skip if this task is a parent task
+                            if task.parent_id.is_none() {
+                                false
+                            } else if task.parent_id.as_deref() != Some(existing_id) {
+                                // Log which type of operation was deduplicated
+                                log::info!("🔍 Skipping duplicate {} task: {}", op_type, 
+                                           task.description.chars().take(50).collect::<String>());
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            seen_operations.insert(dedup_key, task.id.clone());
+                            false
                         }
                     }
-                    
-                    // Add to seen commands
-                    seen_descriptions.insert(command, task.id.clone());
                 }
+            } else {
+                // No operation type, so no deduplication
+                false
+            };
+            
+            if is_duplicate {
+                dupes_removed += 1;
+                continue;
             }
             
             // Add task to queue and map
@@ -162,54 +308,32 @@ impl TaskExecutor {
             AgentError::TaskExecution(format!("Failed to lock task map: {}", e))
         })?;
 
-        // Check for duplicates before adding (especially for BASH tasks)
-        let should_add = if let Some(op_type) = &task.operation_type {
-            if *op_type == OperationType::BASH {
-                // Extract command
-                let command = if task.description.contains("Execute command:") {
-                    task.description.replace("Execute command:", "").trim().to_string()
-                } else {
-                    task.description.clone()
-                };
-                
-                // Check if this command already exists in any queued task
-                let duplicate = task_queue.iter().any(|t| {
-                    if let Some(t_op) = &t.operation_type {
-                        if *t_op == OperationType::BASH {
-                            let t_desc = if t.description.contains("Execute command:") {
-                                t.description.replace("Execute command:", "").trim().to_string()
-                            } else {
-                                t.description.clone()
-                            };
-                            
-                            // Compare commands
-                            t_desc == command
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                });
-                
-                if duplicate {
-                    log::info!("🔍 Skipping duplicate BASH task: {}", command);
-                    false
-                } else {
-                    true
-                }
-            } else {
-                true
-            }
-        } else {
-            true
-        };
+        // Check for duplicates before adding with the new deduplication logic
+        let task_key = self.get_deduplication_key(&task);
+        let op_type = task.operation_type.clone().unwrap_or(OperationType::UNKNOWN);
         
-        // Add task to the map and front of the queue if not a duplicate
-        if should_add {
-            task_map.insert(task.id.clone(), task.clone());
-            task_queue.push_front(task);
+        // Check if this task already exists in any queued task
+        let duplicate = task_queue.iter().any(|t| {
+            // Skip parent tasks (those without parent_id)
+            if task.parent_id.is_none() {
+                false
+            } else {
+                // For each task in the queue, generate its deduplication key and compare
+                let t_key = self.get_deduplication_key(t);
+                t_key == task_key
+            }
+        });
+        
+        if duplicate {
+            // Log which operation type was skipped
+            log::info!("🔍 Skipping duplicate {} task (high priority): {}", 
+                       op_type, task.description.chars().take(50).collect::<String>());
+            return Ok(());
         }
+        
+        // Add task to the map and front of the queue since it's not a duplicate
+        task_map.insert(task.id.clone(), task.clone());
+        task_queue.push_front(task);
 
         Ok(())
     }
@@ -224,54 +348,32 @@ impl TaskExecutor {
             AgentError::TaskExecution(format!("Failed to lock task map: {}", e))
         })?;
 
-        // Check for duplicates before adding (especially for BASH tasks)
-        let should_add = if let Some(op_type) = &task.operation_type {
-            if *op_type == OperationType::BASH {
-                // Extract command
-                let command = if task.description.contains("Execute command:") {
-                    task.description.replace("Execute command:", "").trim().to_string()
-                } else {
-                    task.description.clone()
-                };
-                
-                // Check if this command already exists in any queued task
-                let duplicate = task_queue.iter().any(|t| {
-                    if let Some(t_op) = &t.operation_type {
-                        if *t_op == OperationType::BASH {
-                            let t_desc = if t.description.contains("Execute command:") {
-                                t.description.replace("Execute command:", "").trim().to_string()
-                            } else {
-                                t.description.clone()
-                            };
-                            
-                            // Compare commands
-                            t_desc == command
-                        } else {
-                            false
-                        }
-                    } else {
-                        false
-                    }
-                });
-                
-                if duplicate {
-                    log::info!("🔍 Skipping duplicate BASH task: {}", command);
-                    false
-                } else {
-                    true
-                }
-            } else {
-                true
-            }
-        } else {
-            true
-        };
+        // Check for duplicates before adding with the new deduplication logic
+        let task_key = self.get_deduplication_key(&task);
+        let op_type = task.operation_type.clone().unwrap_or(OperationType::UNKNOWN);
         
-        // Add task to the map and back of the queue if not a duplicate
-        if should_add {
-            task_map.insert(task.id.clone(), task.clone());
-            task_queue.push_back(task);
+        // Check if this task already exists in any queued task
+        let duplicate = task_queue.iter().any(|t| {
+            // Skip parent tasks (those without parent_id)
+            if task.parent_id.is_none() {
+                false
+            } else {
+                // For each task in the queue, generate its deduplication key and compare
+                let t_key = self.get_deduplication_key(t);
+                t_key == task_key
+            }
+        });
+        
+        if duplicate {
+            // Log which operation type was skipped
+            log::info!("🔍 Skipping duplicate {} task: {}", 
+                       op_type, task.description.chars().take(50).collect::<String>());
+            return Ok(());
         }
+        
+        // Add task to the map and back of the queue since it's not a duplicate
+        task_map.insert(task.id.clone(), task.clone());
+        task_queue.push_back(task);
 
         Ok(())
     }

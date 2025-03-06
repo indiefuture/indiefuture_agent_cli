@@ -7,7 +7,7 @@ use crate::error::AgentResult;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MessageRole {
     System,
     User,
@@ -28,19 +28,6 @@ impl ToString for MessageRole {
 pub struct Message {
     pub role: MessageRole,
     pub content: String,
-    pub name: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FunctionCall {
-    pub name: String,
-    pub arguments: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatCompletionResponse {
-    pub content: Option<String>,
-    pub function_call: Option<FunctionCall>,
 }
 
 #[async_trait]
@@ -48,12 +35,13 @@ pub trait AiClient: Send + Sync {
     /// Generate text from a conversation history
     async fn generate_text(&self, messages: Vec<Message>) -> AgentResult<String>;
     
-    /// Generate chat completion with functions
-    async fn chat_completion_with_functions(
+    /// Generate text with functions
+    async fn generate_text_with_functions(
         &self, 
         messages: Vec<Message>, 
-        functions: serde_json::Value
-    ) -> AgentResult<ChatCompletionResponse> {
+        functions: serde_json::Value,
+        function_call: Option<&str>
+    ) -> AgentResult<serde_json::Value> {
         // Default implementation to support backward compatibility
         // Derived implementations should override this
         Err(crate::error::AgentError::AiApi(

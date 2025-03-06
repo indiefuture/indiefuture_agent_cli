@@ -1,6 +1,6 @@
 [
   {
-    "name": "Explain",
+    "name": "ExplainTool",
     "description": "Provides an explanation to the user using accumulated context from previous tools. Use this as the final step after gathering information with other tools like GlobTool, GrepTool, and FileReadTool.",
     "parameters": {
       "type": "object",
@@ -14,7 +14,7 @@
     }
   },
   {
-    "name": "Task",
+    "name": "TaskTool",
     "description": "Create a multiple subtask for general AI assistance, analysis, or processing. DO not select this tool, ever",
     "parameters": {
       "type": "object",
@@ -28,7 +28,7 @@
     }
   },
   {
-    "name": "Bash",
+    "name": "BashTool",
     "description": "Execute a bash command on the system",
     "parameters": {
       "type": "object",
@@ -101,7 +101,7 @@
   },
   {
     "name": "GlobTool",
-    "description": "Find files matching a glob pattern. Typically used as a first step before more specific operations (like reading files or searching within them).  This only adds the file context local memory context. It must be followed with an EXPLAIN tool call to actually explain something or output something.",
+    "description": "Find files matching a glob pattern.    This just adds the file context local memory context.  ",
     "parameters": {
       "type": "object",
       "properties": {

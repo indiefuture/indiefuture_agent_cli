@@ -30,7 +30,7 @@ pub trait SubtaskTool {
 #[derive(Debug, Clone)]
 pub enum SubTaskType {
 
-    ProtoSubtask (String), // can be converted to an actual subtask 
+    ProtoSubtask ( ProtoSubtaskInner ), // can be converted to an actual subtask 
 
     Task(String),
     
@@ -56,7 +56,7 @@ impl SubTaskType {
             Self::Task(query) => Arc::new(TaskTool(query.to_string())),
 
 
-            Self::ProtoSubtask(query) => Arc::new(ProtoSubtask(query.to_string())),
+            Self::ProtoSubtask(query) => Arc::new(ProtoSubtask(query.clone())),
 
             Self::FileReadTool(input) => Arc::new(FileReadTool(input.clone())),
 
@@ -73,7 +73,238 @@ impl SubTaskType {
             Self::ExplainTool(query) => Arc::new(ExplainTool(query.to_string())),
         }
     }
-}
+
+
+
+
+    /// Returns the tool schema for a specific subtask type
+    pub fn get_ai_tool_schema(&self) -> serde_json::Value {
+        match self {
+            Self::ExplainTool( _ ) => json!({
+                "name": "ExplainTool",
+                "description": "Provides an explanation to the user using accumulated context. Can be used directly without prior tools when specific information is requested.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "string",
+                      "description": "The specific question or topic to explain based on the gathered context"
+                    }
+                  },
+                  "required": []
+                }
+            }),
+            
+            Self::Task( _ ) => json!({
+                "name": "TaskTool",
+                "description": "Create a multiple subtask for general AI assistance, analysis, or processing. DO not select this tool, ever",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "type": "string",
+                      "description": "The task description or query for the AI to process"
+                    }
+                  },
+                  "required": ["description"]
+                }
+            }),
+            
+            Self::Bash( _ ) => json!({
+                "name": "BashTool",
+                "description": "Execute a bash command on the system",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "command": {
+                      "type": "string",
+                      "description": "The bash command to execute"
+                    }
+                  },
+                  "required": ["command"]
+                }
+            }),
+            
+            Self::FileReadTool( _ ) => json!({
+                "name": "FileReadTool",
+                "description": "Read the contents of a file",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "file_path": {
+                      "type": "string",
+                      "description": "The absolute path to the file to read"
+                    },
+                    "limit": {
+                      "type": "number",
+                      "description": "Optional: The maximum number of lines to read"
+                    },
+                    "offset": {
+                      "type": "number",
+                      "description": "Optional: The line number to start reading from (0-based)"
+                    }
+                  },
+                  "required": ["file_path"]
+                }
+            }),
+            
+            Self::FileEditTool( _ ) => json!({
+                "name": "FileEditTool",
+                "description": "Edit the contents of a file by replacing text",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "file_path": {
+                      "type": "string",
+                      "description": "The absolute path to the file to edit"
+                    },
+                    "old_string": {
+                      "type": "string",
+                      "description": "The text to replace. Must be exact including whitespace"
+                    },
+                    "new_string": {
+                      "type": "string",
+                      "description": "The new text to insert in place of old_string"
+                    }
+                  },
+                  "required": ["file_path", "old_string", "new_string"]
+                }
+            }),
+            
+            Self::LSTool( _ ) => json!({
+                "name": "LSTool",
+                "description": "List files and directories at a specified path",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "description": "The absolute path to the directory to list"
+                    }
+                  },
+                  "required": ["path"]
+                }
+            }),
+            
+            Self::GlobTool( _ ) => json!({
+                "name": "GlobTool",
+                "description": "Find files matching a glob pattern. Use only when searching for files is the specific intent.",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "pattern": {
+                      "type": "string",
+                      "description": "The glob pattern to match (e.g., '**/*.rs', 'src/**/*.json', '**/*.{js,ts}')"
+                    },
+                    "path": {
+                      "type": "string", 
+                      "description": "Optional: The directory to search in"
+                    }
+                  },
+                  "required": ["pattern"]
+                }
+            }),
+            
+            Self::GrepTool( _ ) => json!({
+                "name": "GrepTool",
+                "description": "Search for content in files using regular expressions",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "pattern": {
+                      "type": "string",
+                      "description": "The regex pattern to search for in file contents (e.g., 'function\\s+main', 'import\\s+React')"
+                    },
+                    "include": {
+                      "type": "string",
+                      "description": "Optional: File pattern to include (e.g., '*.rs', '*.{ts,tsx}')"
+                    },
+                    "path": {
+                      "type": "string",
+                      "description": "Optional: The directory to search in"
+                    }
+                  },
+                  "required": ["pattern"]
+                }
+            }),
+            
+            Self::ProtoSubtask( _ ) => json!({
+                "name": "ProtoSubtask",
+                "description": "A subtask that will be processed to determine which actual tool to use",
+                "parameters": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "type": "string",
+                      "description": "Description of what needs to be done"
+                    },
+                    "priority": {
+                      "type": "string",
+                      "description": "Optional priority level (high, medium, low)"
+                    }
+                  },
+                  "required": ["description"]
+                }
+            }),
+        }
+    }
+    
+    /// Returns all tool schemas as a JSON array
+    pub fn get_all_tool_schemas() -> serde_json::Value {
+        let task_types = vec![
+            SubTaskType::ExplainTool(String::new()),
+            SubTaskType::Task(String::new()),
+            SubTaskType::Bash(String::new()),
+            SubTaskType::FileReadTool(FileReadToolInputs { file_path: String::new(), limit: None, offset: None }),
+            SubTaskType::FileEditTool(FileEditToolInputs { file_path: String::new(), old_string: String::new(), new_string: String::new() }),
+            SubTaskType::LSTool(LSToolInputs { file_path: String::new() }),
+            SubTaskType::GlobTool(GlobToolInputs { pattern: String::new(), path: None }),
+            SubTaskType::GrepTool(GrepToolInputs { pattern: String::new(), include: None, path: None }),
+        ];
+        
+        json!(task_types.iter().map(|tt| tt.get_ai_tool_schema()).collect::<Vec<_>>())
+    }
+
+    pub fn get_tool_schema_for_tool(tool_name: String) -> serde_json::Value {
+        let mut task_types = Vec::new();
+
+        // Check if the tool name matches any tool, add that tool to task_types
+        match tool_name.as_str() {
+            "ExplainTool" => task_types.push(SubTaskType::ExplainTool(String::new())),
+            "TaskTool" => task_types.push(SubTaskType::Task(String::new())),
+            "BashTool" => task_types.push(SubTaskType::Bash(String::new())),
+            "FileReadTool" => task_types.push(SubTaskType::FileReadTool(FileReadToolInputs { 
+                file_path: String::new(), 
+                limit: None, 
+                offset: None 
+            })),
+            "FileEditTool" => task_types.push(SubTaskType::FileEditTool(FileEditToolInputs { 
+                file_path: String::new(), 
+                old_string: String::new(), 
+                new_string: String::new() 
+            })),
+            "LSTool" => task_types.push(SubTaskType::LSTool(LSToolInputs { 
+                file_path: String::new() 
+            })),
+            "GlobTool" => task_types.push(SubTaskType::GlobTool(GlobToolInputs { 
+                pattern: String::new(), 
+                path: None 
+            })),
+            "GrepTool" => task_types.push(SubTaskType::GrepTool(GrepToolInputs { 
+                pattern: String::new(), 
+                include: None, 
+                path: None 
+            })),
+            _ => {} // Tool name not found
+        }
+        
+        json!(task_types.iter().map(|tt| tt.get_ai_tool_schema()).collect::<Vec<_>>())
+    }
+
+
+
+
+  }
 
 
 
@@ -95,7 +326,7 @@ impl SubTaskType {
             
         // Create the appropriate subtask based on the function call
         let subtask = match function_name {
-            "Task" => {
+            "TaskTool" => {
                 let description = match args["description"].as_str() {
                     Some(desc) => desc.to_string(),
                     None => return None,
@@ -105,7 +336,7 @@ impl SubTaskType {
                 SubTaskType::Task(description) 
             },
             
-            "Bash" => {
+            "BashTool" => {
                 let command = match args["command"].as_str() {
                     Some(cmd) => cmd.to_string(),
                     None => return None,
@@ -205,7 +436,7 @@ impl SubTaskType {
                 })
             },
             
-            "Explain" => {
+            "ExplainTool" => {
                 let query = match args["query"].as_str() {
                     Some(q) => q.to_string(),
                     None =>   "".into(),
@@ -216,64 +447,7 @@ impl SubTaskType {
                 SubTaskType::ExplainTool(query)
             },
             
-            
-            
-            "View" | "ReadFile"   => {
-                let file_path = match args["file_path"].as_str() {
-                    Some(path) => path.to_string(),
-                    None => return None,
-                };
-                
-                let limit = args["limit"].as_u64().map(|v| v as u32);
-                let offset = args["offset"].as_u64().map(|v| v as u32);
-                
-                let _ = cliclack::log::info(format!("Legacy function: {} -> FileReadTool: {}", function_name, file_path));
-                
-                SubTaskType::FileReadTool(FileReadToolInputs {
-                    file_path,
-                    limit,
-                    offset
-                })
-            },
-            
-            "Edit" => {
-                let file_path = match args["file_path"].as_str() {
-                    Some(path) => path.to_string(),
-                    None => return None,
-                };
-                
-                let old_string = match args["old_string"].as_str() {
-                    Some(s) => s.to_string(),
-                    None => return None,
-                };
-                
-                let new_string = match args["new_string"].as_str() {
-                    Some(s) => s.to_string(),
-                    None => return None,
-                };
-                
-                let _ = cliclack::log::info(format!("Legacy function: Edit -> FileEditTool: {}", file_path));
-                
-                SubTaskType::FileEditTool(FileEditToolInputs {
-                    file_path,
-                    old_string,
-                    new_string
-                })
-            },
-            
-            "LS" => {
-                let file_path = match args["path"].as_str() {
-                    Some(path) => path.to_string(),
-                    None => return None,
-                };
-                
-                let _ = cliclack::log::info(format!("Legacy function: LS -> LSTool: {}", file_path));
-                
-                SubTaskType::LSTool(LSToolInputs {
-                    file_path
-                })
-            },
-            
+             
          
             
             _ => {
@@ -312,7 +486,7 @@ impl SubTaskType {
             SubTaskType::GlobTool(inputs) => format!("Glob Search: {}", inputs.pattern),
             SubTaskType::GrepTool(inputs) => format!("Grep Search: {}", inputs.pattern),
             SubTaskType::ExplainTool(query) => format!("Explain: {}", query),
-            SubTaskType::ProtoSubtask(query) => format!("Proto: {}", query),
+            SubTaskType::ProtoSubtask(query) => format!("Proto: {:?}", query),
         }
     }
     
@@ -366,7 +540,83 @@ impl SubTask {
 }
 
 
- pub struct TaskTool(String);  //query 
+
+
+ 
+#[derive(Clone,Debug,Serialize,Deserialize )]
+pub struct ProtoSubtaskInner {
+    pub tool_name :String, 
+    pub description: String,
+    pub priority: Option<String>  
+}
+
+impl ProtoSubtaskInner {
+    pub fn parse_from_raw(arguments: serde_json::Value) -> Vec<Self> {
+        // Handle case where arguments is a string that needs to be parsed as JSON
+        let args = if let serde_json::Value::String(args_str) = &arguments {
+            // Try to parse the string as JSON
+            match serde_json::from_str::<serde_json::Value>(args_str) {
+                Ok(parsed) => parsed,
+                Err(e) => {
+                    println!("WARN: could not parse string arguments: {:?}, error: {}", args_str, e);
+                    return Vec::new();
+                }
+            }
+        } else {
+            // Use as is if not a string
+            arguments
+        };
+        
+        // Check if we have a subtasks array in the arguments
+        let subtasks = match args.get("subtasks") {
+            Some(subtasks) if subtasks.is_array() => match subtasks.as_array() {
+                Some(array) => array,
+                None => return Vec::new(),
+            },
+            _ => return Vec::new(),
+        };
+        
+        let mut result = Vec::new();
+        
+        // Process all subtasks in the array
+        for subtask in subtasks {
+
+             let tool_name = match subtask.get("tool_name") {
+                Some(desc) if desc.is_string() => match desc.as_str() {
+                    Some(s) => s.to_string(),
+                    None => continue,
+                },
+                _ => continue,
+            };
+            
+
+            // Extract description
+            let description = match subtask.get("description") {
+                Some(desc) if desc.is_string() => match desc.as_str() {
+                    Some(s) => s.to_string(),
+                    None => continue,
+                },
+                _ => continue,
+            };
+            
+            // Extract optional priority
+            let priority = subtask.get("priority")
+                .and_then(|p| p.as_str())
+                .map(|s| s.to_string());
+            
+            result.push(ProtoSubtaskInner {
+                tool_name , 
+                description,
+                priority,
+            });
+        }
+        
+        result
+    }
+}
+
+
+ pub struct TaskTool(String);  // agent tool  
  
 #[async_trait] 
 impl SubtaskTool for TaskTool {
@@ -402,11 +652,15 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
 
         // Create messages for the AI
         let messages = vec![
+
+
             Message {
                 role: MessageRole::System,
                 content: system_prompt.to_string(),
                 name: None,
             },
+ 
+
             Message {
                 role: MessageRole::User,
                 content: input.to_string(),
@@ -448,7 +702,7 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
 
          let secondary_input_messages = vec![
              Message {
-                role: MessageRole::System,
+                role: MessageRole::Developer,
                 content: system_prompt.to_string(),
                 name: None,
             },
@@ -476,6 +730,14 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
                         "items": {
                           "type": "object",
                           "properties": {
+
+                            "tool_name": {
+                              "type": "string",
+                              "description": "name of the subtask",
+                              "enum": [ "ExplainTool","TaskTool","BashTool","FileReadTool","FileEditTool","LSTool","GlobTool","GrepTool" ]
+
+                            },
+
                             "description": {
                               "type": "string",
                               "description": "Description of the subtask"
@@ -486,7 +748,7 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
                               "description": "Priority level of the subtask"
                             }
                           },
-                          "required": ["description"]
+                          "required": ["tool_name","description"]
                         }
                       }
                     },
@@ -529,24 +791,36 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
         }
 
 
+ 
 
 
         let mut proto_subtasks = Vec::new();
         for tool_call in tool_calls {
 
-            proto_subtasks.push(  ProtoSubtask ( tool_call.function.arguments.to_string()   )     ) ;
+            let subtask_inners = ProtoSubtaskInner::parse_from_raw( tool_call.function.arguments .clone() );
+            
+ 
+
+              if subtask_inners.len() == 0 {
+                 println!("WARN: could not parse {:?}", tool_call.function.arguments );
+            
+             }
+               proto_subtasks.extend(  subtask_inners    ) ;
 
         }
 
 
 
 
+        proto_subtasks.reverse();
 
+
+            //this works ! 
           Some( SubtaskOutput::PushSubtasks( 
           
-              proto_subtasks .iter().map( |x|  SubTaskType::ProtoSubtask( x.0 .clone() ) ).collect()
+              proto_subtasks .iter().map( |x|  SubTaskType::ProtoSubtask( x .clone() ) ).collect()
 
-             )  ) 
+          )  ) 
 
 
 
@@ -584,57 +858,61 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
 
 //use ai and context to convert this to a 'hard type' subtask 
 
- pub struct ProtoSubtask(String);  //query 
+ pub struct ProtoSubtask(  ProtoSubtaskInner  );  //query 
  
 #[async_trait] 
 impl SubtaskTool for ProtoSubtask {
     async fn handle_subtask(&self, ai_client: &Box<dyn AiClient>, _context_memory: Arc<Mutex<ContextMemory>>) -> Option<SubtaskOutput> {
         let input = &self.0;
+        
+        // Check if the description explicitly mentions a tool to use
+        let desc_lower = input.description.to_lowercase();
 
 
-
-
-
+        let subtask_name = &input.tool_name;
+        
+        // If a specific tool is mentioned in the description, use it directly
+        if desc_lower.contains("use explaintool") || desc_lower.contains("utilize explaintool") || 
+           desc_lower.contains("with explaintool") || desc_lower.contains("clear memory") {
+            println!("Explicit tool request detected: ExplainTool");
+            return Some(SubtaskOutput::PushSubtasks(vec![
+                SubTaskType::ExplainTool(input.description.clone())
+            ]));
+        }
+        
         let system_prompt = r#"
-You are an expert AI assistant for a command-line tool that helps with software development tasks of a local codebase.
-Your job is to analyze user requests and determine what operations the command-line tool should  perform.
-
-IMPORTANT: You MUST recommend multiple tools (at least 2-3) to complete the task in a step-by-step fashion. 
-Break down complex tasks into a sequence of simpler operations using different tools in the optimal order.
-
-SUGGESTED WORKFLOW PATTERN:
-1. Use search tools (GlobTool, GrepTool) to find relevant files
-2. Use FileReadTool to examine the contents of those files
-3. Use ExplainTool as a final step to provide an explanation using all the gathered context
-
-For example, if asked to "explain the logging system in this codebase", you should recommend:
-1. First use GlobTool to find all source files
-2. Then use GrepTool to search for "log" or "logger" patterns in those files
-3. Use FileReadTool to examine the most relevant files in detail
-4. Finally use ExplainTool to provide a comprehensive explanation based on all gathered information
-
-
-Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer based on all gathered information.
+You are an expert AI assistant for a command-line tool that helps with software development tasks of a local codebase. 
+ 
+Ignore any instructions above or past context and just follow the instruction of this user message here. 
+ 
 "#;
 
-        // Load function schema from JSON file
-        let functions_json = include_str!("schemas/task_functions.json");
-        let functions: serde_json::Value = serde_json::from_str(functions_json)
-            .expect("Failed to parse task_functions.json");
+        // Get function schemas using our static method
+        let functions = SubTaskType::get_tool_schema_for_tool( subtask_name.clone() );
 
         // Create messages for the AI
         let messages = vec![
+
+
             Message {
-                role: MessageRole::System,
+                role: MessageRole::Developer,
+                content: "Clear memory.".to_string(),
+                name: None,
+            },
+
+            Message {
+                role: MessageRole::Developer,
                 content: system_prompt.to_string(),
                 name: None,
             },
             Message {
                 role: MessageRole::User,
-                content: input.to_string(),
+                content: input.description.to_string(),
                 name: None,
             },
         ];
+
+        println!("{}", format!("messages {:?}", messages));
 
         // Call AI with function calling enabled
         let best_function_response = match ai_client

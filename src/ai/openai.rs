@@ -237,12 +237,17 @@ impl AiClient for OpenAiClient {
                         //    "max_completion_tokens": 8000,  // Ensure enough tokens for multiple tool calls
 
                             "tools": function_tools,
-                            "parallel_tool_calls": true , 
+
+                            "tool_choice": "required",
+                           // "parallel_tool_calls": true , 
                             
                         }),
 
                     false => json!({
-                        "model": self.model,
+                      //  "model": self.model,
+
+                        "model": "gpt-4o" ,
+
                         "messages": api_messages,
 
                         //"temperature": 0.7,
@@ -256,7 +261,7 @@ impl AiClient for OpenAiClient {
 
 
             
-            println!("request_body {:?}", request_body);
+            //println!("request_body {:?}", request_body);
 
 
  

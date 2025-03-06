@@ -161,7 +161,10 @@ impl AgentEngine {
 					  cliclack::log::info("✓ Operation approved").expect("Failed to log");
 
 					    let spin = spinner();
-    					spin.start("Processing task...");
+    					spin.start("Processing task... " );
+
+    					  cliclack::log::info(format!(" TASK {:?}",  next_subtask.subtask) ).expect("Failed to log");
+
 
 
 					  let subtask_output =  self.perform_subtask(  

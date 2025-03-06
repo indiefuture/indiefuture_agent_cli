@@ -11,6 +11,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MessageRole {
     System,
+    Developer,
     User,
     Assistant,
 }
@@ -18,6 +19,7 @@ pub enum MessageRole {
 impl ToString for MessageRole {
     fn to_string(&self) -> String {
         match self {
+            MessageRole::Developer => "developer".to_string(),
             MessageRole::System => "system".to_string(),
             MessageRole::User => "user".to_string(),
             MessageRole::Assistant => "assistant".to_string(),

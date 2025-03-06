@@ -96,7 +96,7 @@ You must select the most appropriate operations to complete a user's request.
             },
              
             {
-                "name": "create_bash",
+                "name": "exec_bash",
                 "description": "Create a subtask to execute a bash command",
                 "parameters": {
                     "type": "object",
@@ -217,7 +217,7 @@ You must select the most appropriate operations to complete a user's request.
                     SubTask::new(SubTaskType::Search(query.to_string()), None)
                 },
                 
-                "create_bash" => {
+                "exec_bash" => {
                     // Extract command parameter
                     let command = args["command"].as_str()
                         .ok_or_else(|| AgentError::AiApi("Missing command parameter".to_string()))?

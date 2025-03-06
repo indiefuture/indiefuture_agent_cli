@@ -1,16 +1,16 @@
-
-
- 
 use crate::memory::ContextMemory;
 use tokio::sync::Mutex;
-use log::info;
+ 
 use cliclack::log as cliclack_log;
 use cliclack::input;
 use crate::ai::MessageRole;
 use crate::AiClient;
 use serde_json::json;
 use crate::ai::Message;
- 
+
+
+use cliclack::log; 
+
 use crate::AgentError;
 use std::fmt;
 use std::sync::Arc;
@@ -227,22 +227,38 @@ You must select the most appropriate operations to complete a user's request.
             .chat_completion_with_functions(messages, functions)
             .await {
                 Ok(resp) => resp,
-                Err(_) => return None,
+                Err( e ) => {
+                         println!("WARN no  chat_completion_with_functions {:?}", e );
+                    return None
+                },  
             };
+        
+
+        if let Some(content) = response.content {
+
+             println!("{}",   content );
+
+
+        }
         
         // Process function calls if any
         let Some(function_call) = response.function_call else {
+
+            println!("WARN no fn call chosen ");
             return None;
         };
 
         let function_name = function_call.name.as_str();
         let args: serde_json::Value = match serde_json::from_str(&function_call.arguments) {
             Ok(args) => args,
-            Err(_) => return None,
+            Err(_) => {
+                         println!("WARN no function match  ");
+                    return None
+                },
         };
             
         // Log that we got a function call
-        info!("Processing function: {}", function_name);
+        let _ = cliclack::log::info(format!("Processing function: {}", function_name ) );
             
         // Create the appropriate subtask based on the function call
         let subtask = match function_name {
@@ -254,7 +270,8 @@ You must select the most appropriate operations to complete a user's request.
                 };
                 
                 // Log it
-                info!("Adding task: {}", description);
+             
+                let _ = cliclack::log::info(format!("Adding task: {}", description) );
                 
                 SubTask::new(SubTaskType::Task(description), None)
             },
@@ -267,7 +284,7 @@ You must select the most appropriate operations to complete a user's request.
                 };
                 
                 // Log it
-                info!("Adding read file subtask: {}", file_path);
+                let _ = cliclack::log::info(format!("Adding read file subtask: {}", file_path));
                 
                 SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(file_path)), None)
             },
@@ -280,7 +297,7 @@ You must select the most appropriate operations to complete a user's request.
                 };
                 
                 // Log it
-                info!("Adding read lookup subtask: {}", lookup_query);
+                let _ = cliclack::log::info(format!("Adding read lookup subtask: {}", lookup_query));
                 
                 SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(lookup_query)), None)
             },
@@ -293,7 +310,7 @@ You must select the most appropriate operations to complete a user's request.
                 };
                 
                 // Log it
-                info!("Adding update file subtask: {}", file_path);
+                let _ = cliclack::log::info(format!("Adding update file subtask: {}", file_path));
                 
                 SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(file_path)), None)
             },
@@ -306,7 +323,7 @@ You must select the most appropriate operations to complete a user's request.
                 };
                 
                 // Log it
-                info!("Adding update lookup subtask: {}", lookup_query);
+                let _ = cliclack::log::info(format!("Adding update lookup subtask: {}", lookup_query));
                 
                 SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(lookup_query)), None)
             },
@@ -319,7 +336,7 @@ You must select the most appropriate operations to complete a user's request.
                 };
                 
                 // Log it
-                info!("Adding search subtask: {}", query);
+                let _ = cliclack::log::info(format!("Adding search subtask: {}", query));
                 
                 SubTask::new(SubTaskType::Search(query), None)
             },
@@ -332,7 +349,7 @@ You must select the most appropriate operations to complete a user's request.
                 };
                 
                 // Log it
-                info!("Adding bash subtask: {}", command);
+                let _ = cliclack::log::info(format!("Adding bash subtask: {}", command));
                 
                 SubTask::new(SubTaskType::Bash(command), None)
             },
@@ -345,10 +362,10 @@ You must select the most appropriate operations to complete a user's request.
                 };
                 
                 if description.starts_with('/') || description.starts_with("./") {
-                    info!("Adding legacy read file subtask: {}", description);
+                    let _ = cliclack::log::info(format!("Adding legacy read file subtask: {}", description));
                     SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(description)), None)
                 } else {
-                    info!("Adding legacy read lookup subtask: {}", description);
+                    let _ = cliclack::log::info(format!("Adding legacy read lookup subtask: {}", description));
                     SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(description)), None)
                 }
             },
@@ -359,7 +376,7 @@ You must select the most appropriate operations to complete a user's request.
                     None => return None,
                 };
                 
-                info!("Adding legacy update subtask: {}", description);
+                let _ = cliclack::log::info(format!("Adding legacy update subtask: {}", description));
                 
                 if description.starts_with('/') || description.starts_with("./") {
                     SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(description)), None)
@@ -374,7 +391,7 @@ You must select the most appropriate operations to complete a user's request.
                     None => return None,
                 };
                 
-                info!("Adding legacy search subtask: {}", description);
+                let _ = cliclack::log::info(format!("Adding legacy search subtask: {}", description));
                 
                 SubTask::new(SubTaskType::Search(description), None)
             },
@@ -400,17 +417,16 @@ impl SubtaskTool for ReadTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
+	async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 
 
 
+            None
 
-                None
 
-
-		 }
+	 }
 
 
 }
@@ -428,23 +444,66 @@ pub struct BashTool(String);  //query
  
 #[ async_trait ] 
 impl SubtaskTool for BashTool {
+    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput > { 
+        let command = &self.0;
 
- 
+        // Execute Bash command
+        let _ = cliclack::log::info(format!("🔧 Executing command: {}", command));
+        
+        // Use tokio::process::Command to execute the command
+        use tokio::process::Command;
+        let output = match Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .output()
+            .await {
+                Ok(out) => out,
+                Err(e) => {
+                    let _ = cliclack::log::info(format!("Failed to execute command: {}", e));
+                    return None;
+                }
+            };
+        
+        // Process the output
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        
+        // Print the results in a nice format
+        if !stdout.is_empty() {
+            println!();
+            let _ = cliclack::log::info(format!("📄 Command output:"));
+            
+            // Print the output with some formatting
+            let width = 80;
+            let separator = "─".repeat(width);
+            println!("┌{}┐", separator);
+            
+            // Split and limit output lines if too long
+            let max_lines = 20;
+            let lines: Vec<&str> = stdout.lines().collect();
+            let display_lines = if lines.len() > max_lines {
+                let mut truncated = lines[0..max_lines].to_vec();
+                truncated.push("... (output truncated)");
+                truncated
+            } else {
+                lines
+            };
+            
+            for line in display_lines {
+                println!("│ {:<width$} │", line, width=width-2);
+            }
+            
+            println!("└{}┘", separator);
+        }
+        
+        if !stderr.is_empty() {
+            println!();
+            let _ = cliclack::log::info(format!("⚠️ Command errors:"));
+            println!("{}", stderr);
+        }
 
-
-		async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput > { 
-
-
-
-
-
-
-
-            None
-
-		 }
-
-
+        Some( SubtaskOutput::SubtaskComplete() )
+    }
 }
 
 
@@ -459,7 +518,7 @@ impl SubtaskTool for UpdateTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
+	async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 
@@ -469,7 +528,7 @@ impl SubtaskTool for UpdateTool {
 
 
             None
-		 }
+	 }
 
 
 }
@@ -486,7 +545,7 @@ impl SubtaskTool for SearchTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
+	async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 
@@ -496,7 +555,7 @@ impl SubtaskTool for SearchTool {
 
 
             None 
-		 }
+	 }
 
 
 }

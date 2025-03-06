@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::ai::{AiClient, Message, MessageRole, ChatCompletionResponse, FunctionCall};
 use crate::error::{AgentError, AgentResult};
 use async_trait::async_trait;
@@ -43,12 +44,33 @@ struct OpenAiChoice {
     message: OpenAiResponseMessage,
 }
 
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GptFunctionCall {
+    pub name: String,
+    pub arguments:  serde_json::Value , // serde_json::Value  //this a stringified array i think         // Vec< Box<serde_json::Value> >
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GptToolCall {
+    pub r#type: String,//will always be 'function'
+    pub function: GptFunctionCall, // serde_json::Value  //this a stringified array i think         // Vec< Box<serde_json::Value> >
+}
+
+
+
 #[derive(Debug, Deserialize)]
 struct OpenAiResponseMessage {
-    #[serde(default)]
+    /*#[serde(default)]
     content: Option<String>,
     #[serde(default)]
-    function_call: Option<OpenAiFunctionCall>,
+    function_call: Option<OpenAiFunctionCall>,*/
+
+
+      pub content: Option<String>,
+    pub role: Option<String>,
+    pub tool_calls: Option<Vec<GptToolCall>>,
+
 }
 
 #[derive(Debug, Deserialize)]
@@ -156,6 +178,9 @@ impl AiClient for OpenAiClient {
         messages: Vec<Message>, 
         functions: Value
     ) -> AgentResult<ChatCompletionResponse> {
+
+
+
         let api_messages: Vec<OpenAiMessage> = messages
             .into_iter()
             .map(|m| OpenAiMessage {
@@ -164,24 +189,95 @@ impl AiClient for OpenAiClient {
                 name: m.name,
             })
             .collect();
-        
+
+
+            let mut function_tools = Vec::new();
+
+            println!("fns {:?}", functions);
+
+            if let Some(functions_array) = functions.as_array(){
+
+                for func_raw in functions_array {
+
+
+                    if let Ok(func) = serde_json::from_value::<OpenAiCallableFunction>( func_raw.clone() ){
+
+                    function_tools .push(    FunctionTool{
+
+                           r#type: "function".into(),
+                           function: func.clone()
+                        } );
+                   }
+                }
+                    
+            }
+
+
+            println!("function_tools {:?}", function_tools);
+
+
+           let enable_function_calling = true ; // for now 
+
+           let request_body = match enable_function_calling {
+ 
+                    true => json!({
+                           // "model": self.model.clone(),
+                             "model": "gpt-4o" ,
+
+                            "messages": api_messages,
+                          //   "temperature": 0.7,
+                          //  "max_tokens": Some(4000),
+
+                            "tools": function_tools,
+                            "tool_choice": "required"  // or 'automatic'
+                        
+                        }),
+
+                    false => json!({
+                        "model": self.model,
+                        "messages": api_messages,
+
+                        //"temperature": 0.7,
+                        // "max_tokens": Some(4000),
+                       
+                    
+                    }),
+
+        };
+
+
+
+            
+            println!("request_body {:?}", request_body);
+
+
+
+
+/*
         let request = OpenAiCompletionRequest {
             model: self.model.clone(),
             messages: api_messages,
             temperature: 0.7,
             max_tokens: Some(4000),
             functions: Some(functions),
-            function_call: Some(json!("auto")),
-        };
+
+            function_call: Some(json!({"name": "required"})), // Properly formatted to force function calling
+
+           // function_call: json!("required").into()   //Some(json!("auto")),
+        };*/
         
         let response = self
             .client
             .post("https://api.openai.com/v1/chat/completions")
-            .json(&request)
+            .json(&request_body)
             .send()
             .await
             .map_err(|e| AgentError::AiApi(format!("OpenAI API request failed: {}", e)))?;
         
+
+           println!("response {:?}", response);
+
+
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
@@ -197,13 +293,20 @@ impl AiClient for OpenAiClient {
             .await
             .map_err(|e| AgentError::AiApi(format!("Failed to parse OpenAI response: {}", e)))?;
         
+
+
+           println!("response_data {:?}", response_data);
+
         if response_data.choices.is_empty() {
             return Err(AgentError::AiApi("OpenAI API returned no choices".to_string()));
         }
         
         let message = &response_data.choices[0].message;
         
-        let result = if let Some(function_call) = &message.function_call {
+        let result = if let Some(tool_calls) = &message.tool_calls {
+
+
+
             ChatCompletionResponse {
                 content: message.content.clone(),
                 function_call: Some(FunctionCall {
@@ -211,6 +314,9 @@ impl AiClient for OpenAiClient {
                     arguments: function_call.arguments.clone(),
                 }),
             }
+
+
+            
         } else {
             ChatCompletionResponse {
                 content: message.content.clone(),
@@ -268,4 +374,29 @@ impl AiClient for OpenAiClient {
     fn clone_box(&self) -> Box<dyn AiClient> {
         Box::new(self.clone())
     }
+}
+
+
+#[derive(Serialize,Debug)]
+pub struct FunctionTool {
+    
+    r#type: String,
+    function: OpenAiCallableFunction 
+}
+
+
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OpenAiCallableFunction {
+    pub name: String,
+    pub description: String,
+    pub parameters: OpenAiCallableParameters,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OpenAiCallableParameters {
+    #[serde(rename = "type")]
+    pub type_field: String,
+    pub properties: HashMap<String, serde_json::Value>, //Box<serde_json::Value> >,  // value is actually a property descriptor
+    pub required: Vec<String>,                          //these are the required properties
 }

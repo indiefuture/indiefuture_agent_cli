@@ -367,7 +367,7 @@ impl SubtaskTool for TaskTool {
 
         let system_prompt = r#"
 You are an expert AI assistant for a command-line tool that helps with software development tasks of a local codebase.
-Your job is to analyze user requests and determine what operations to perform.
+Your job is to analyze user requests and determine what operations the command-line tool should  perform.
 
 IMPORTANT: You MUST recommend multiple tools (at least 2-3) to complete the task in a step-by-step fashion. 
 Break down complex tasks into a sequence of simpler operations using different tools in the optimal order.
@@ -407,8 +407,8 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
         ];
 
         // Call AI with function calling enabled
-        let response = match ai_client
-            .chat_completion_with_functions(messages, functions)
+        let message_only_response = match ai_client
+            .chat_completion_with_functions(messages, functions.clone(), true )
             .await {
                 Ok(resp) => resp,
                 Err(e) => {
@@ -416,14 +416,54 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
                     return None;
                 },  
             };
+
+
+
+        let Some(first_content) = message_only_response.content  else {
+
+
+            return None ; 
+        };
+
+
+          let _ = cliclack::log::info(format!(" My plan : {}", first_content));
+
+
+
+         let secondary_input_messages = vec![
+             Message {
+                role: MessageRole::System,
+                content: system_prompt.to_string(),
+                name: None,
+            },
+             Message {
+                role: MessageRole::User,
+                content: first_content.to_string(),
+                name: None,
+            },
+         ];   
+
+         println!("secondary input messages {:?}", secondary_input_messages);
+
+        let secondary_response = match ai_client
+            .chat_completion_with_functions( secondary_input_messages ,  functions.clone(), false )
+            .await {
+                Ok(resp) => resp,
+                Err(e) => {
+                    println!("WARN: Failed to get chat completion: {:?}", e);
+                    return None;
+                },  
+            };
+
+
         
         // Display AI response text if any
-        if let Some(content) = response.content {
+        if let Some(content) = secondary_response.content {
             println!("{}", content);
         }
         
         // Process function calls
-        let Some(tool_calls) = response.tool_calls else {
+        let Some(tool_calls) = secondary_response.tool_calls else {
             println!("WARN: No tool calls chosen by AI");
             return None;
         };

@@ -185,7 +185,9 @@ impl AiClient for OpenAiClient {
     async fn chat_completion_with_functions(
         &self, 
         messages: Vec<Message>, 
-        functions: Value
+        functions: Value,
+
+        force_message_only: bool, 
     ) -> AgentResult<ChatCompletionResponse> {
 
 
@@ -220,18 +222,14 @@ impl AiClient for OpenAiClient {
                     
             }
 
-               println!("api_messages {:?}", api_messages);
            
 
-            println!("function_tools {:?}", function_tools);
-
-
-           let enable_function_calling = true ; // for now 
+           let enable_function_calling = !force_message_only ; // for now 
 
            let request_body = match enable_function_calling {
  
                     true => json!({
-                           // "model": self.model.clone(),
+                          
                              "model": "gpt-4o" ,
 
                             "messages": api_messages,
@@ -239,8 +237,7 @@ impl AiClient for OpenAiClient {
                         //    "max_completion_tokens": 8000,  // Ensure enough tokens for multiple tool calls
 
                             "tools": function_tools,
-                            "tool_choice": "required",  // Allow multiple tool calls
-                             "parallel_tool_calls" : true
+                            
                         }),
 
                     false => json!({

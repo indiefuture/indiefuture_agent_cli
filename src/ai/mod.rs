@@ -59,7 +59,8 @@ pub trait AiClient: Send + Sync {
     async fn chat_completion_with_functions(
         &self, 
         messages: Vec<Message>, 
-        functions: serde_json::Value
+        functions: serde_json::Value,
+         force_message_only: bool 
     ) -> AgentResult<ChatCompletionResponse> {
         // Default implementation to support backward compatibility
         // Derived implementations should override this

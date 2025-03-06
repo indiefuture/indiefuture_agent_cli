@@ -173,7 +173,8 @@ impl AiClient for ClaudeClient {
     async fn chat_completion_with_functions(
         &self, 
         messages: Vec<Message>, 
-        functions: Value
+        functions: Value,
+         force_message_only: bool, 
     ) -> AgentResult<ChatCompletionResponse> {
         // Extract system message if present
         let mut system_message = None;

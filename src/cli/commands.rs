@@ -1,3 +1,4 @@
+use crate::agent_engine::AgentEngine;
 use cliclack::{self, spinner, confirm, log};
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -12,12 +13,13 @@ use crate::config::Settings;
 use crate::error::{AgentError, AgentResult};
 use crate::memory::{MemoryManager, ShortTermMemory, VectorStore};
 use crate::task::{
-    SubTask, SubTaskType, SubTaskQueueManager, SubTaskExecutor,
+    SubTask, SubTaskType,   SubTaskExecutor,
     // Legacy imports
-    OperationType, Task, TaskDecomposer, TaskExecutor, TaskStatus
+    OperationType, Task,  TaskExecutor, TaskStatus
 };
 
 /// Execute a CLI command
+/*
 pub async fn execute_command(command: &str, args: &str, settings: Arc<Settings>) -> AgentResult<()> {
     match command {
         "task" => execute_task(args, settings).await,
@@ -25,29 +27,32 @@ pub async fn execute_command(command: &str, args: &str, settings: Arc<Settings>)
         "config" => show_config(settings).await,
         _ => Err(AgentError::Cli(format!("Unknown command: {}", command))),
     }
-}
+}*/
 
 /// Add a subtask to the queue
-pub fn add_queued_subtask(subtask: SubTask) -> AgentResult<()> {
+/*pub fn add_queued_subtask(subtask: SubTask) -> AgentResult<()> {
     let queue_manager = SubTaskQueueManager::global();
     queue_manager.add_queued_subtask(subtask);
     Ok(())
-}
+}*/
 
 /// Execute a complex task by breaking it down and handling subtasks
-async fn execute_task(task_description: &str, settings: Arc<Settings>) -> AgentResult<()> {
+pub async fn ask_confirmation_for_subtask(
+
+    mut agent_engine : &mut AgentEngine , 
+
+    subtask: SubTaskType,
+
+     settings: Arc<Settings>
+
+     ) -> AgentResult<()> {
     // Initialize components
-    let ai_client = create_ai_client(
-        &settings.default_ai_provider,
-        &settings.default_model,
-        settings.openai_api_key.as_deref().unwrap_or(""),
-    )?;
+   
+   
     
-    // Create subtask executor
-    let mut subtask_executor = SubTaskExecutor::new(ai_client.clone_box());
     
     // Set up the user confirmation callback
-    subtask_executor.set_user_confirmation_callback(Box::new(|subtask: &SubTask| {
+    agent_engine.set_user_confirmation_callback(Box::new(|subtask: &SubTask| {
         // Get confirmation from the user
         println!("\n");
         
@@ -68,7 +73,7 @@ async fn execute_task(task_description: &str, settings: Arc<Settings>) -> AgentR
             log::info("⨯ Operation declined").expect("Failed to log");
         }
         result
-    }));
+    }))  ;
     
     // Process user input to generate subtasks
     log::info("🔄 Analyzing task...").expect("Failed to log");
@@ -76,12 +81,12 @@ async fn execute_task(task_description: &str, settings: Arc<Settings>) -> AgentR
     spin.start("Processing task...");
     
     // Process the user input and generate subtasks
-    subtask_executor.process_user_input(task_description).await?;
+    agent_engine.process_user_input(task_description).await?;
     
     spin.stop("Task analyzed ✓");
     
-    // Display the queue status
-    let queue_manager = SubTaskQueueManager::global();
+  /*
+
     let queue_size = queue_manager.queue_length();
     
     if queue_size > 0 {
@@ -121,11 +126,13 @@ async fn execute_task(task_description: &str, settings: Arc<Settings>) -> AgentR
         }
     } else {
         log::info("⚠️ No subtasks were generated").expect("Failed to log");
-    }
+    }*/
     
     Ok(())
 }
 
+
+/*
 /// Scan the codebase to build the vector index
 async fn scan_codebase(path_str: &str, settings: Arc<Settings>) -> AgentResult<()> {
     let scan_path = if path_str.is_empty() {
@@ -233,3 +240,5 @@ async fn show_config(settings: Arc<Settings>) -> AgentResult<()> {
     
     Ok(())
 }
+
+*/

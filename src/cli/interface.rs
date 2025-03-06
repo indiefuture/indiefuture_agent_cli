@@ -1,13 +1,30 @@
+use crate::agent_engine::SharedState;
+use crate::agent_engine::ContextMemory;
+use tokio::sync::Mutex;
 use cliclack::{self, intro, outro, select, input};
 use console::style;
-use crate::cli::commands::execute_command;
+use crate::agent_engine::AgentEngine;
+//use crate::cli::commands::execute_command;
 use crate::error::AgentResult;
 use crate::config::Settings;
 use std::io;
 use std::sync::Arc;
 
+
+
+  
 /// Main CLI entry point
-pub async fn run_cli(settings: Arc<Settings>) -> AgentResult<()> {
+pub async fn run_cli(
+
+        shared_state: Arc<SharedState>, 
+        context_memory: Arc< ContextMemory  >,
+
+    settings: Arc<Settings>, 
+
+    agent_engine: Arc<Mutex<AgentEngine>>
+
+
+    ) -> AgentResult<()> {
     // Welcome message
     intro("IndieFuture Agent CLI").expect("Failed to show intro");
     cliclack::log::info("Your AI-powered assistant for complex tasks").expect("Failed to show info");
@@ -38,20 +55,41 @@ pub async fn run_cli(settings: Arc<Settings>) -> AgentResult<()> {
                 };
                 
                 if !task_description.is_empty() {
-                    execute_command("task", &task_description, settings.clone()).await?;
+
+                    agent_engine.lock().await.push_subtask(
+                          crate::SubTaskType::Task( task_description.clone() )
+
+                        );
+                   // execute_command("task", &task_description, settings.clone()).await?;
                 }
             }
             "scan" => {
-                execute_command("scan", "", settings.clone()).await?;
+                //execute_command("scan", "", settings.clone()).await?;
             }
             "config" => {
-                execute_command("config", "", settings.clone()).await?;
+               // execute_command("config", "", settings.clone()).await?;
             }
             "quit" | _ => {
                 outro("Goodbye!").expect("Failed to show outro");
                 break;
             }
         }
+
+
+        // handle ALL subtasks until the entire stack (queue) is empty and then we loop again 
+        agent_engine.lock().await.handle_subtasks( 
+
+
+            Arc::clone( &shared_state ),
+            Arc::clone( &context_memory  )
+            Arc::clone( &settings )
+
+              ).await 
+
+
+
+
+
     }
     
     Ok(())

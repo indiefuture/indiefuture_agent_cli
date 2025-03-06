@@ -6,6 +6,7 @@ pub mod error;
 pub mod memory;
 pub mod task;
 pub mod utils;
+pub mod agent_engine;
 
 pub use error::{AgentError, AgentResult};
 
@@ -14,4 +15,4 @@ pub use ai::AiClient;
 pub use cli::run_cli;
 pub use config::Settings;
 pub use memory::{MemoryManager, WorkingContext};
-pub use task::{SubTask, SubTaskType, SubTaskExecutor, SubTaskQueueManager};
+pub use task::{SubTask, SubTaskType, SubTaskExecutor   };

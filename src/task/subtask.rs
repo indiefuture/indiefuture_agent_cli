@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::fmt;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
@@ -11,38 +12,29 @@ use crate::memory::MemoryManager;
 
 /// Read subtask variants
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ReadAction {
+pub enum FilePathOrQuery {
     /// Read a specific file path
     FilePath(String),
     /// Look for a file matching a description
-    LookForFile(String),
+    FileQuery(String),
 }
 
-/// Update subtask variants
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum UpdateAction {
-    /// Update a specific file path
-    FilePath(String, String), // (path, new content or changes)
-    /// Look for a file to update based on description
-    LookForFile(String, String), // (file description, changes)
+impl fmt::Display for FilePathOrQuery {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FilePathOrQuery::FilePath(path) => write!(f, "{}", path),
+            FilePathOrQuery::FileQuery(query) => write!(f, "query: {}", query),
+        }
+    }
 }
-
-/// Search subtask variants
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SearchAction {
-    /// Search for a keyword in code
-    Content(String),
-    /// Search for a file by name pattern
-    FileName(String),
-}
-
+ 
 /// The type of subtask
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SubTaskType {
-    Task(String),
-    Read(ReadAction),
-    Update(UpdateAction),
-    Search(SearchAction),
+    Task(String),   // ???? 
+    Read(FilePathOrQuery),
+    Update(FilePathOrQuery),
+    Search(String),
     Bash(String),
 }
 
@@ -50,18 +42,11 @@ impl SubTaskType {
     pub fn description(&self) -> String {
         match self {
             SubTaskType::Task(desc) => desc.clone(),
-            SubTaskType::Read(action) => match action {
-                ReadAction::FilePath(path) => format!("Read file: {}", path),
-                ReadAction::LookForFile(desc) => format!("Find and read: {}", desc),
-            },
-            SubTaskType::Update(action) => match action {
-                UpdateAction::FilePath(path, _) => format!("Update file: {}", path),
-                UpdateAction::LookForFile(desc, _) => format!("Find and update: {}", desc),
-            },
-            SubTaskType::Search(action) => match action {
-                SearchAction::Content(query) => format!("Search for content: {}", query),
-                SearchAction::FileName(pattern) => format!("Search for file: {}", pattern),
-            },
+
+            SubTaskType::Read(path_or_query) => format!("Read file: {}", path_or_query) ,
+            SubTaskType::Update(path_or_query) => format!("Update file: {}", path_or_query) ,
+            SubTaskType::Search(desc) => format!("Search file: {}", desc) ,
+          
             SubTaskType::Bash(cmd) => cmd.clone(),
         }
     }
@@ -260,30 +245,4 @@ impl TaskExecutor {
         // The new implementation will use SubTaskQueue
         Ok(self.tasks.clone())
     }
-}
-
-/// Legacy TaskDecomposer - to be replaced by new implementation
-pub struct TaskDecomposer {
-    ai_client: Box<dyn AiClient>,
-    timeout_seconds: u64,
-}
-
-impl TaskDecomposer {
-    pub fn new(ai_client: Box<dyn AiClient>, timeout_seconds: u64) -> Self {
-        Self {
-            ai_client,
-            timeout_seconds,
-        }
-    }
-
-    pub async fn decompose(&self, task_description: &str) -> AgentResult<Vec<Task>> {
-        // Create a simple parent task
-        let parent_task = Task::new(
-            task_description.to_string(),
-            Some(OperationType::TASK),
-            None,
-        );
-
-        Ok(vec![parent_task])
-    }
-}
+} 

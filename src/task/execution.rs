@@ -1,3 +1,4 @@
+use crate::task::subtask::FilePathOrQuery;
 use std::sync::Arc;
 use async_trait::async_trait;
 use cliclack::{self, confirm, log};
@@ -7,22 +8,21 @@ use serde_json::json;
 use crate::ai::{AiClient, Message, MessageRole};
 use crate::error::{AgentError, AgentResult};
 use crate::task::{
-    SubTask, SubTaskType, SubTaskQueueManager, TaskStatus,
-    ReadAction, UpdateAction, SearchAction
+    SubTask, SubTaskType,    TaskStatus,  
 };
 
 /// Executor for subtasks
 pub struct SubTaskExecutor {
-    ai_client: Box<dyn AiClient>,
-    queue_manager: Arc<SubTaskQueueManager>,
-    user_confirmation_callback: Option<Box<dyn Fn(&SubTask) -> bool + Send + Sync>>,
+ //   ai_client: Box<dyn AiClient>,
+   // queue_manager: Arc<SubTaskQueueManager>,
+   // user_confirmation_callback: Option<Box<dyn Fn(&SubTask) -> bool + Send + Sync>>,
 }
 
 impl SubTaskExecutor {
     pub fn new(ai_client: Box<dyn AiClient>) -> Self {
         Self {
             ai_client,
-            queue_manager: SubTaskQueueManager::global(),
+        // queue_manager: SubTaskQueueManager::global(),
             user_confirmation_callback: None,
         }
     }
@@ -34,10 +34,8 @@ impl SubTaskExecutor {
         self.user_confirmation_callback = Some(callback);
     }
     
-    /// Add a new subtask to the queue
-    pub fn add_queued_subtask(&self, subtask: SubTask) {
-        self.queue_manager.add_queued_subtask(subtask);
-    }
+     
+
     
     /// Process user input to generate subtasks using the AI
     pub async fn process_user_input(&self, input: &str) -> AgentResult<()> {
@@ -65,7 +63,7 @@ You must select the most appropriate operations to complete a user's request.
                 }
             },
             {
-                "name": "create_read_file",
+                "name": "read_file_at_path",
                 "description": "Create a subtask to read a specific file by path",
                 "parameters": {
                     "type": "object",
@@ -79,21 +77,21 @@ You must select the most appropriate operations to complete a user's request.
                 }
             },
             {
-                "name": "create_read_lookup",
+                "name": "read_file_from_lookup",
                 "description": "Create a subtask to find and read a file matching a description",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "description": {
+                        "lookup_query": {
                             "type": "string",
                             "description": "Description of the file to find and read"
                         }
                     },
-                    "required": ["description"]
+                    "required": ["lookup_query"]
                 }
             },
             {
-                "name": "create_update_file",
+                "name": "update_file_at_path",
                 "description": "Create a subtask to update a specific file by path",
                 "parameters": {
                     "type": "object",
@@ -101,35 +99,27 @@ You must select the most appropriate operations to complete a user's request.
                         "file_path": {
                             "type": "string",
                             "description": "Full path to the file to update"
-                        },
-                        "content": {
-                            "type": "string",
-                            "description": "New content or changes to make to the file"
                         }
                     },
-                    "required": ["file_path", "content"]
+                    "required": ["file_path"]
                 }
             },
             {
-                "name": "create_update_lookup",
+                "name": "update_file_from_lookup",
                 "description": "Create a subtask to find and update a file matching a description",
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "description": {
+                        "lookup_query": {
                             "type": "string",
                             "description": "Description of the file to find and update"
-                        },
-                        "content": {
-                            "type": "string",
-                            "description": "New content or changes to make to the file"
                         }
                     },
-                    "required": ["description", "content"]
+                    "required": ["lookup_query"]
                 }
             },
             {
-                "name": "create_search_content",
+                "name": "search_for_file",
                 "description": "Create a subtask to search for content in files",
                 "parameters": {
                     "type": "object",
@@ -142,20 +132,7 @@ You must select the most appropriate operations to complete a user's request.
                     "required": ["query"]
                 }
             },
-            {
-                "name": "create_search_filename",
-                "description": "Create a subtask to search for files by name pattern",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "pattern": {
-                            "type": "string",
-                            "description": "Filename pattern to search for"
-                        }
-                    },
-                    "required": ["pattern"]
-                }
-            },
+             
             {
                 "name": "create_bash",
                 "description": "Create a subtask to execute a bash command",
@@ -218,7 +195,7 @@ You must select the most appropriate operations to complete a user's request.
                     SubTask::new(SubTaskType::Task(description), None)
                 },
                 
-                "create_read_file" => {
+                "read_file_at_path" => {
                     // Extract file_path parameter
                     let file_path = args["file_path"].as_str()
                         .ok_or_else(|| AgentError::AiApi("Missing file_path parameter".to_string()))?
@@ -227,75 +204,55 @@ You must select the most appropriate operations to complete a user's request.
                     // Log it
                     log::info(&format!("Adding read file subtask: {}", file_path)).expect("Failed to log");
                     
-                    SubTask::new(SubTaskType::Read(ReadAction::FilePath(file_path)), None)
+                    SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(file_path)), None)
                 },
                 
-                "create_read_lookup" => {
-                    // Extract description parameter
-                    let description = args["description"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing description parameter".to_string()))?
+                "read_file_from_lookup" => {
+                    // Extract lookup_query parameter
+                    let lookup_query = args["lookup_query"].as_str()
+                        .ok_or_else(|| AgentError::AiApi("Missing lookup_query parameter".to_string()))?
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding read lookup subtask: {}", description)).expect("Failed to log");
+                    log::info(&format!("Adding read lookup subtask: {}", lookup_query)).expect("Failed to log");
                     
-                    SubTask::new(SubTaskType::Read(ReadAction::LookForFile(description)), None)
+                    SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(lookup_query)), None)
                 },
                 
-                "create_update_file" => {
-                    // Extract file_path and content parameters
+                "update_file_at_path" => {
+                    // Extract file_path parameter
                     let file_path = args["file_path"].as_str()
                         .ok_or_else(|| AgentError::AiApi("Missing file_path parameter".to_string()))?
-                        .to_string();
-                    
-                    let content = args["content"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing content parameter".to_string()))?
                         .to_string();
                     
                     // Log it
                     log::info(&format!("Adding update file subtask: {}", file_path)).expect("Failed to log");
                     
-                    SubTask::new(SubTaskType::Update(UpdateAction::FilePath(file_path, content)), None)
+                    SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(file_path)), None)
                 },
                 
-                "create_update_lookup" => {
-                    // Extract description and content parameters
-                    let description = args["description"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing description parameter".to_string()))?
-                        .to_string();
-                    
-                    let content = args["content"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing content parameter".to_string()))?
+                "update_file_from_lookup" => {
+                    // Extract lookup_query parameter
+                    let lookup_query = args["lookup_query"].as_str()
+                        .ok_or_else(|| AgentError::AiApi("Missing lookup_query parameter".to_string()))?
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding update lookup subtask: {}", description)).expect("Failed to log");
+                    log::info(&format!("Adding update lookup subtask: {}", lookup_query)).expect("Failed to log");
                     
-                    SubTask::new(SubTaskType::Update(UpdateAction::LookForFile(description, content)), None)
+                    SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(lookup_query)), None)
                 },
                 
-                "create_search_content" => {
+                "search_for_file" => {
                     // Extract query parameter
                     let query = args["query"].as_str()
                         .ok_or_else(|| AgentError::AiApi("Missing query parameter".to_string()))?
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding content search subtask: {}", query)).expect("Failed to log");
+                    log::info(&format!("Adding search subtask: {}", query)).expect("Failed to log");
                     
-                    SubTask::new(SubTaskType::Search(SearchAction::Content(query)), None)
-                },
-                
-                "create_search_filename" => {
-                    // Extract pattern parameter
-                    let pattern = args["pattern"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing pattern parameter".to_string()))?
-                        .to_string();
-                    
-                    // Log it
-                    log::info(&format!("Adding filename search subtask: {}", pattern)).expect("Failed to log");
-                    
-                    SubTask::new(SubTaskType::Search(SearchAction::FileName(pattern)), None)
+                    SubTask::new(SubTaskType::Search(query.to_string()), None)
                 },
                 
                 "create_bash" => {
@@ -318,10 +275,10 @@ You must select the most appropriate operations to complete a user's request.
                     
                     if description.starts_with('/') || description.starts_with("./") {
                         log::info(&format!("Adding legacy read file subtask: {}", description)).expect("Failed to log");
-                        SubTask::new(SubTaskType::Read(ReadAction::FilePath(description)), None)
+                        SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(description)), None)
                     } else {
                         log::info(&format!("Adding legacy read lookup subtask: {}", description)).expect("Failed to log");
-                        SubTask::new(SubTaskType::Read(ReadAction::LookForFile(description)), None)
+                        SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(description)), None)
                     }
                 },
                 
@@ -333,15 +290,9 @@ You must select the most appropriate operations to complete a user's request.
                     log::info(&format!("Adding legacy update subtask: {}", description)).expect("Failed to log");
                     
                     if description.starts_with('/') || description.starts_with("./") {
-                        SubTask::new(SubTaskType::Update(UpdateAction::FilePath(
-                            description, 
-                            "// Placeholder content for update".to_string()
-                        )), None)
+                        SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(description)), None)
                     } else {
-                        SubTask::new(SubTaskType::Update(UpdateAction::LookForFile(
-                            description, 
-                            "// Placeholder content for update".to_string()
-                        )), None)
+                        SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(description)), None)
                     }
                 },
                 
@@ -352,12 +303,7 @@ You must select the most appropriate operations to complete a user's request.
                     
                     log::info(&format!("Adding legacy search subtask: {}", description)).expect("Failed to log");
                     
-                    if description.starts_with("file:") {
-                        let pattern = description.trim_start_matches("file:").trim().to_string();
-                        SubTask::new(SubTaskType::Search(SearchAction::FileName(pattern)), None)
-                    } else {
-                        SubTask::new(SubTaskType::Search(SearchAction::Content(description)), None)
-                    }
+                    SubTask::new(SubTaskType::Search( description ), None)
                 },
                 
                 _ => return Err(AgentError::AiApi(format!("Unknown function: {}", function_name))),
@@ -382,11 +328,11 @@ You must select the most appropriate operations to complete a user's request.
                 for term in key_terms {
                     // Create a search task for each key term
                     let search_subtask = SubTask::new(
-                        SubTaskType::Search(SearchAction::Content(term.clone())), 
+                        SubTaskType::Search ( term.clone() ), 
                         None
                     );
                     self.add_queued_subtask(search_subtask);
-                    log::info(&format!("  - Added content search for: {}", term)).expect("Failed to log");
+                    log::info(&format!("  - Added search for: {}", term)).expect("Failed to log");
                 }
             }
         }
@@ -502,16 +448,16 @@ You must select the most appropriate operations to complete a user's request.
                         updated_subtask.result = Some(stdout);
                     },
                     
-                    SubTaskType::Read(action) => {
-                        match action {
-                            ReadAction::FilePath(path) => {
+                    SubTaskType::Read(path_or_query) => {
+                        match path_or_query {
+                            FilePathOrQuery::FilePath(path) => {
                                 // It's a file path, read the file
                                 log::info(&format!("📖 Reading file: {}", path)).expect("Failed to log");
                                 
                                 use std::fs;
                                 use std::path::Path;
                                 
-                                let file_path = Path::new(path);
+                                let file_path = Path::new(&path);
                                 if file_path.exists() {
                                     // Read the file content
                                     let content = fs::read_to_string(file_path)
@@ -556,15 +502,15 @@ You must select the most appropriate operations to complete a user's request.
                                     updated_subtask.result = Some(format!("File not found: {}", path));
                                 }
                             },
-                            ReadAction::LookForFile(description) => {
-                                // Search for files matching the description
-                                log::info(&format!("🔍 Looking for file matching: {}", description)).expect("Failed to log");
+                            FilePathOrQuery::FileQuery(query) => {
+                                // Search for files matching the query
+                                log::info(&format!("🔍 Looking for file matching: {}", query)).expect("Failed to log");
                                 
                                 // Use find to search for files that might match
                                 use tokio::process::Command;
                                 
-                                // Convert description to search terms
-                                let search_terms: Vec<&str> = description.split_whitespace().collect();
+                                // Convert query to search terms
+                                let search_terms: Vec<&str> = query.split_whitespace().collect();
                                 
                                 if !search_terms.is_empty() {
                                     // Build a find command with multiple -name patterns
@@ -590,7 +536,7 @@ You must select the most appropriate operations to complete a user's request.
                                     
                                     if !stdout.is_empty() {
                                         println!();
-                                        log::info(&format!("📁 Files matching description '{}':", description)).expect("Failed to log");
+                                        log::info(&format!("📁 Files matching query '{}':", query)).expect("Failed to log");
                                         
                                         // Print the content with some formatting
                                         let width = 100;
@@ -608,7 +554,7 @@ You must select the most appropriate operations to complete a user's request.
                                         updated_subtask.status = TaskStatus::Completed;
                                         updated_subtask.result = Some(stdout);
                                     } else {
-                                        log::info(&format!("❌ No files found matching description: {}", description)).expect("Failed to log");
+                                        log::info(&format!("❌ No files found matching query: {}", query)).expect("Failed to log");
                                         
                                         // Update the subtask result
                                         let mut updated_subtask = subtask.clone();
@@ -616,82 +562,128 @@ You must select the most appropriate operations to complete a user's request.
                                         updated_subtask.result = Some("No matching files found".to_string());
                                     }
                                 } else {
-                                    log::info("❌ Invalid file description").expect("Failed to log");
+                                    log::info("❌ Invalid file query").expect("Failed to log");
                                 }
                             }
                         }
                     },
                     
-                    SubTaskType::Search(action) => {
+                    SubTaskType::Search( query) => {
                         use tokio::process::Command;
                         
-                        match action {
-                            SearchAction::Content(query) => {
+                  //      match path_or_query {
+                          /*  FilePathOrQuery::FilePath(path) => {
+                                log::info(&format!("🔍 Searching specific file: {}", path)).expect("Failed to log");
+                                
+                                // In this case, we'll just read the file to examine it
+                                use std::fs;
+                                use std::path::Path;
+                                
+                                let file_path = Path::new(&path);
+                                if file_path.exists() {
+                                    // Read the file content to examine
+                                    let content = fs::read_to_string(file_path)
+                                        .map_err(|e| AgentError::TaskExecution(format!("Failed to read file: {}", e)))?;
+                                    
+                                    // Print the content
+                                    println!();
+                                    log::info(&format!("📄 Content of {}:", path)).expect("Failed to log");
+                                    
+                                    // Print the content with some formatting
+                                    let width = 80;
+                                    let separator = "─".repeat(width);
+                                    println!("┌{}┐", separator);
+                                    
+                                    // Split and limit output lines if too long
+                                    let max_lines = 30;
+                                    let lines: Vec<&str> = content.lines().collect();
+                                    let display_lines = if lines.len() > max_lines {
+                                        let mut truncated = lines[0..max_lines].to_vec();
+                                        truncated.push("... (content truncated)");
+                                        truncated
+                                    } else {
+                                        lines
+                                    };
+                                    
+                                    for line in display_lines {
+                                        println!("│ {:<width$} │", line, width=width-2);
+                                    }
+                                    
+                                    println!("└{}┘", separator);
+                                    
+                                    // Update the subtask result
+                                    let mut updated_subtask = subtask.clone();
+                                    updated_subtask.status = TaskStatus::Completed;
+                                    updated_subtask.result = Some(content);
+                                } else {
+                                    log::info(&format!("❌ File not found: {}", path)).expect("Failed to log");
+                                    
+                                    // Update the subtask result with error
+                                    let mut updated_subtask = subtask.clone();
+                                    updated_subtask.status = TaskStatus::Failed;
+                                    updated_subtask.result = Some(format!("File not found: {}", path));
+                                }
+                            },*/
+                           // FilePathOrQuery::FileQuery(query) => {
+
+
+                            //lets change this so it pops down a depth and   adds SUB-SUB tasks to help build our context ! 
+
                                 log::info(&format!("🔍 Searching for content: {}", query)).expect("Failed to log");
                                 
-                                // Search for files containing the query
-                                let output = Command::new("sh")
+                                // First, search for files containing the query text
+                                let grep_output = Command::new("sh")
                                     .arg("-c")
                                     .arg(format!("grep -r \"{}\" . --include=\"*.rs\" --include=\"*.toml\" 2>/dev/null | head -n 20", query))
                                     .output()
                                     .await
                                     .map_err(|e| AgentError::TaskExecution(format!("Failed to execute search: {}", e)))?;
                                 
-                                // Process the output
-                                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                                // Process the grep output
+                                let grep_stdout = String::from_utf8_lossy(&grep_output.stdout).to_string();
                                 
-                                // Print the results
-                                if !stdout.is_empty() {
-                                    println!();
-                                    log::info(&format!("🔍 Content search results for '{}':", query)).expect("Failed to log");
-                                    
-                                    // Print the content with some formatting
-                                    let width = 100;
-                                    let separator = "─".repeat(width);
-                                    println!("┌{}┐", separator);
-                                    
-                                    for line in stdout.lines() {
-                                        println!("│ {:<width$} │", line, width=width-2);
-                                    }
-                                    
-                                    println!("└{}┘", separator);
-                                    
-                                    // Update the subtask result
-                                    let mut updated_subtask = subtask.clone();
-                                    updated_subtask.status = TaskStatus::Completed;
-                                    updated_subtask.result = Some(stdout);
-                                } else {
-                                    log::info(&format!("❌ No content matches found for '{}'", query)).expect("Failed to log");
-                                    
-                                    // Update the subtask result
-                                    let mut updated_subtask = subtask.clone();
-                                    updated_subtask.status = TaskStatus::Completed;
-                                    updated_subtask.result = Some("No content matches found".to_string());
-                                }
-                            },
-                            SearchAction::FileName(pattern) => {
-                                log::info(&format!("🔍 Searching for files: {}", pattern)).expect("Failed to log");
-                                
-                                // Search for files with names matching the pattern
-                                let output = Command::new("sh")
+                                // Second, search for files with names matching the query
+                                let find_output = Command::new("sh")
                                     .arg("-c")
-                                    .arg(format!("find . -type f -name \"*{}*\" | grep -v \"target/\" | grep -v \"node_modules/\" | head -n 10", pattern))
+                                    .arg(format!("find . -type f -name \"*{}*\" | grep -v \"target/\" | grep -v \"node_modules/\" | head -n 10", query))
                                     .output()
                                     .await
                                     .map_err(|e| AgentError::TaskExecution(format!("Failed to execute file search: {}", e)))?;
                                 
-                                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                                let find_stdout = String::from_utf8_lossy(&find_output.stdout).to_string();
                                 
-                                if !stdout.is_empty() {
+                                // Combine results
+                                let mut results = String::new();
+                                let mut found_something = false;
+                                
+                                // Print content search results if any
+                                if !grep_stdout.is_empty() {
+                                    found_something = true;
+                                    results.push_str(&format!("Content matching '{}':\n", query));
+                                    results.push_str(&grep_stdout);
+                                }
+                                
+                                // Print filename search results if any
+                                if !find_stdout.is_empty() {
+                                    if found_something {
+                                        results.push_str("\n\n");
+                                    }
+                                    found_something = true;
+                                    results.push_str(&format!("Files matching '{}':\n", query));
+                                    results.push_str(&find_stdout);
+                                }
+                                
+                                // Print the results
+                                if found_something {
                                     println!();
-                                    log::info(&format!("📁 Files matching '{}':", pattern)).expect("Failed to log");
+                                    log::info(&format!("🔍 Search results for '{}':", query)).expect("Failed to log");
                                     
                                     // Print the content with some formatting
                                     let width = 100;
                                     let separator = "─".repeat(width);
                                     println!("┌{}┐", separator);
                                     
-                                    for line in stdout.lines() {
+                                    for line in results.lines() {
                                         println!("│ {:<width$} │", line, width=width-2);
                                     }
                                     
@@ -700,37 +692,41 @@ You must select the most appropriate operations to complete a user's request.
                                     // Update the subtask result
                                     let mut updated_subtask = subtask.clone();
                                     updated_subtask.status = TaskStatus::Completed;
-                                    updated_subtask.result = Some(stdout);
+                                    updated_subtask.result = Some(results);
                                 } else {
-                                    log::info(&format!("❌ No files found matching '{}'", pattern)).expect("Failed to log");
+                                    log::info(&format!("❌ No matches found for '{}'", query)).expect("Failed to log");
                                     
                                     // Update the subtask result
                                     let mut updated_subtask = subtask.clone();
                                     updated_subtask.status = TaskStatus::Completed;
-                                    updated_subtask.result = Some("No matching files found".to_string());
+                                    updated_subtask.result = Some("No matches found".to_string());
                                 }
-                            }
-                        }
+                          //  }
+                      //  }
                     },
                     
-                    SubTaskType::Update(action) => {
-                        match action {
-                            UpdateAction::FilePath(path, content) => {
+                    SubTaskType::Update(path_or_query) => {
+                        match path_or_query {
+                            FilePathOrQuery::FilePath(path) => {
                                 log::info(&format!("✏️ Updating file: {}", path)).expect("Failed to log");
                                 
                                 use std::fs;
                                 use std::path::Path;
                                 
-                                let file_path = Path::new(path);
+                                let file_path = Path::new(&path);
                                 if file_path.exists() {
                                     // For safety, just show the update information for now
                                     println!();
                                     log::info(&format!("Would update file: {}", path)).expect("Failed to log");
                                     log::info("Update functionality not fully implemented yet").expect("Failed to log");
                                     
-                                    // Print the update content preview
+                                    // Read current content
+                                    let content = fs::read_to_string(file_path)
+                                        .map_err(|e| AgentError::TaskExecution(format!("Failed to read file: {}", e)))?;
+                                    
+                                    // Print the current content preview
                                     println!();
-                                    log::info("📝 Update content preview:").expect("Failed to log");
+                                    log::info("📝 Current file content:").expect("Failed to log");
                                     
                                     // Print the content with some formatting
                                     let width = 100;
@@ -767,14 +763,51 @@ You must select the most appropriate operations to complete a user's request.
                                     updated_subtask.result = Some(format!("File not found: {}", path));
                                 }
                             },
-                            UpdateAction::LookForFile(description, _content) => {
-                                log::info(&format!("🔍 Looking for file to update: {}", description)).expect("Failed to log");
-                                log::info("Update by description not fully implemented yet").expect("Failed to log");
+                            FilePathOrQuery::FileQuery(query) => {
+                                log::info(&format!("🔍 Looking for file to update: {}", query)).expect("Failed to log");
                                 
-                                // Update the subtask result
-                                let mut updated_subtask = subtask.clone();
-                                updated_subtask.status = TaskStatus::Completed;
-                                updated_subtask.result = Some("Update by description not implemented yet".to_string());
+                                // Use tokio::process::Command to search for the file
+                                use tokio::process::Command;
+                                
+                                // Search for files with names matching the query
+                                let output = Command::new("sh")
+                                    .arg("-c")
+                                    .arg(format!("find . -type f -name \"*{}*\" | grep -v \"target/\" | grep -v \"node_modules/\" | head -n 5", query))
+                                    .output()
+                                    .await
+                                    .map_err(|e| AgentError::TaskExecution(format!("Failed to search files: {}", e)))?;
+                                
+                                let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                                
+                                if !stdout.is_empty() {
+                                    println!();
+                                    log::info(&format!("📁 Found files matching '{}' that could be updated:", query)).expect("Failed to log");
+                                    
+                                    // Print the content with some formatting
+                                    let width = 100;
+                                    let separator = "─".repeat(width);
+                                    println!("┌{}┐", separator);
+                                    
+                                    for line in stdout.lines() {
+                                        println!("│ {:<width$} │", line, width=width-2);
+                                    }
+                                    
+                                    println!("└{}┘", separator);
+                                    
+                                    // Update the subtask result
+                                    let mut updated_subtask = subtask.clone();
+                                    updated_subtask.status = TaskStatus::Completed;
+                                    updated_subtask.result = Some(stdout);
+                                } else {
+                                    log::info(&format!("❌ No files found matching '{}'", query)).expect("Failed to log");
+                                    
+                                    // Update the subtask result
+                                    let mut updated_subtask = subtask.clone();
+                                    updated_subtask.status = TaskStatus::Completed;
+                                    updated_subtask.result = Some("No matching files found".to_string());
+                                }
+                                
+                                log::info("Update by query not fully implemented yet").expect("Failed to log");
                             }
                         }
                     },

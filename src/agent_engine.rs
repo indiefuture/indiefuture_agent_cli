@@ -142,7 +142,16 @@ impl AgentEngine {
 				break;
 			};
 
-			let confirmed =  self.ask_user_confirmation( next_subtask.subtask.clone() )  .await ;
+
+			 
+
+			let confirmed =  match next_subtask.subtask.requires_user_permission() {
+
+				true => self.ask_user_confirmation( next_subtask.subtask.clone() )  .await ,
+				false =>  true 
+
+			};
+			
 
 			match confirmed {
 

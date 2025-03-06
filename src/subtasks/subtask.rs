@@ -127,6 +127,11 @@ impl SubTaskType {
                 "parameters": {
                   "type": "object",
                   "properties": {
+                    "file_description": {
+                      "type": "string",
+                      "description": "Information about the file or where to find the file"
+                    },
+
                     "file_path": {
                       "type": "string",
                       "description": "The absolute path to the file to read"
@@ -259,6 +264,7 @@ impl SubTaskType {
             SubTaskType::Task(String::new()),
             SubTaskType::Bash(String::new()),
             SubTaskType::FileReadTool(FileReadToolInputs {
+                file_description: None, 
                 file_path: String::new(),
                 limit: None,
                 offset: None,
@@ -299,6 +305,7 @@ impl SubTaskType {
             "BashTool" => task_types.push(SubTaskType::Bash(String::new())),
             "FileReadTool" => task_types.push(SubTaskType::FileReadTool(FileReadToolInputs {
                 file_path: String::new(),
+                file_description: None,
                 limit: None,
                 offset: None,
             })),
@@ -374,6 +381,7 @@ impl SubTaskType {
 
                 SubTaskType::FileReadTool(FileReadToolInputs {
                     file_path,
+                    file_description: None,
                     limit,
                     offset,
                 })
@@ -649,10 +657,8 @@ For example, if asked to "explain the logging system in this codebase", you shou
 Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer based on all gathered information.
 "#;
 
-        // Load function schema from JSON file
-        let functions_json = include_str!("schemas/task_functions.json");
-        let functions: serde_json::Value =
-            serde_json::from_str(functions_json).expect("Failed to parse task_functions.json");
+        // Use the get_all_tool_schemas method to get function schemas
+        let functions = SubTaskType::get_all_tool_schemas();
 
         // Create messages for the AI
         let messages = vec![
@@ -834,7 +840,7 @@ impl SubtaskTool for ProtoSubtask {
     async fn handle_subtask(
         &self,
         ai_client: &Box<dyn AiClient>,
-        _context_memory: Arc<Mutex<ContextMemory>>,
+        context_memory: Arc<Mutex<ContextMemory>>,
     ) -> Option<SubtaskOutput> {
         let input = &self.0;
 
@@ -855,12 +861,95 @@ impl SubtaskTool for ProtoSubtask {
             )]));
         }
 
+        // Create a system prompt that instructs the AI on how to use the context effectively
         let system_prompt = r#"
-You are an expert AI assistant for a command-line tool that helps with software development tasks of a local codebase. 
- 
-Ignore any instructions above or past context and just follow the instruction of this user message here. 
- 
+You are an expert AI assistant for a command-line tool that helps with software development tasks.
+Your task is to use the provided context along with user instructions to determine the appropriate tool to use.
+
+Follow these guidelines:
+1. Review all provided context fragments for relevant information
+2. Consider the specific requirements in the user's description
+3. Choose the most appropriate tool parameters based on the context
+
+If the context contains relevant file paths, code patterns, or specific information,
+use those details to populate the tool parameters precisely.
 "#;
+
+        // Extract and filter memory fragments based on relevance to the current subtask
+        let filtered_memory_context = {
+            let memory = context_memory.lock().await;
+            let all_fragments = memory.get_fragments();
+            
+            // If we have too many fragments, select the most relevant ones
+            let mut filtered_fragments = Vec::new();
+            
+            // Extract key terms from the subtask description
+            let desc_lowercase = input.description.to_lowercase();
+            let desc_terms: Vec<&str> = desc_lowercase
+                .split_whitespace()
+                .collect();
+            
+            // Score each fragment based on relevance to the task description
+            for fragment in all_fragments {
+                let content_lower = fragment.content.to_lowercase();
+                
+                // Calculate a simple relevance score based on matching terms
+                let mut relevance_score = 0;
+                for term in &desc_terms {
+                    if content_lower.contains(term) {
+                        relevance_score += 1;
+                    }
+                }
+                
+                // Also check metadata for relevance
+                if let Some(meta) = &fragment.metadata {
+                    // Check path
+                    if let Some(path) = &meta.path {
+                        let path_lower = path.to_lowercase();
+                        for term in &desc_terms {
+                            if path_lower.contains(term) {
+                                relevance_score += 2; // Paths are more important
+                            }
+                        }
+                    }
+                    
+                    // Check tags
+                    for tag in &meta.tags {
+                        let tag_lower = tag.to_lowercase();
+                        for term in &desc_terms {
+                            if tag_lower.contains(term) {
+                                relevance_score += 2; // Tags are also important
+                            }
+                        }
+                    }
+                }
+                
+                // Include fragments with any relevance or select tools results
+                if relevance_score > 0 || 
+                   fragment.source.contains("search") || 
+                   fragment.source.contains("file_read") ||
+                   fragment.source.contains("ls_tool") {
+                    filtered_fragments.push((fragment.clone(), relevance_score));
+                }
+            }
+            
+            // Sort by relevance score (highest first)
+            filtered_fragments.sort_by(|a, b| b.1.cmp(&a.1));
+            
+            // Limit to most relevant fragments (max 5)
+            let max_fragments = 5.min(filtered_fragments.len());
+            let selected_fragments: Vec<_> = filtered_fragments
+                .into_iter()
+                .take(max_fragments)
+                .map(|(frag, _)| frag)
+                .collect();
+            
+            // Format the selected fragments for the AI
+            format_memory_fragments(&selected_fragments)
+        };
+        
+        // Log how many memory fragments we're using
+        println!("Using filtered memory context for ProtoSubtask");
 
         // Get function schemas using our static method
         let functions = SubTaskType::get_tool_schema_for_tool(subtask_name.clone());
@@ -869,12 +958,12 @@ Ignore any instructions above or past context and just follow the instruction of
         let messages = vec![
             Message {
                 role: MessageRole::Developer,
-                content: "Clear memory.".to_string(),
+                content: system_prompt.to_string(),
                 name: None,
             },
             Message {
                 role: MessageRole::Developer,
-                content: system_prompt.to_string(),
+                content: format!("CONTEXT INFORMATION:\n\n{}", filtered_memory_context),
                 name: None,
             },
             Message {
@@ -883,8 +972,6 @@ Ignore any instructions above or past context and just follow the instruction of
                 name: None,
             },
         ];
-
-        println!("{}", format!("messages {:?}", messages));
 
         // Call AI with function calling enabled
         let best_function_response = match ai_client
@@ -1638,6 +1725,7 @@ impl SubtaskTool for GrepTool {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FileReadToolInputs {
     pub file_path: String,
+    pub file_description:Option<String> ,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }
@@ -1932,6 +2020,49 @@ impl SubtaskTool for FileEditTool {
 }
 
 // --------------
+
+// Helper function to format memory fragments in a structured way for the AI
+fn format_memory_fragments(fragments: &[crate::memory::MemoryFragment]) -> String {
+    if fragments.is_empty() {
+        return "No relevant context available.".to_string();
+    }
+
+    let mut formatted_context = format!("=== RELEVANT CONTEXT ({} ITEMS) ===\n\n", fragments.len());
+
+    for (i, fragment) in fragments.iter().enumerate() {
+        formatted_context.push_str(&format!("--- CONTEXT ITEM {} ---\n", i + 1));
+        formatted_context.push_str(&format!("Source: {}\n", fragment.source));
+        
+        // Add metadata if present
+        if let Some(meta) = &fragment.metadata {
+            if let Some(file_type) = &meta.file_type {
+                formatted_context.push_str(&format!("Type: {}\n", file_type));
+            }
+            if let Some(path) = &meta.path {
+                formatted_context.push_str(&format!("Path: {}\n", path));
+            }
+            if !meta.tags.is_empty() {
+                formatted_context.push_str(&format!("Tags: {}\n", meta.tags.join(", ")));
+            }
+        }
+        
+        // Add content with a separator
+        formatted_context.push_str("Content:\n");
+        formatted_context.push_str("```\n");
+        
+        // Truncate very long content
+        let content = if fragment.content.len() > 2000 {
+            format!("{}...(truncated)", &fragment.content[0..2000])
+        } else {
+            fragment.content.clone()
+        };
+        
+        formatted_context.push_str(&content);
+        formatted_context.push_str("\n```\n\n");
+    }
+
+    formatted_context
+}
 
 pub struct ExplainTool(String); // Query string
 

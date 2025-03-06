@@ -1,4 +1,4 @@
-# IndieFuture Agent CLI
+# INDIEFUTURE BOT
 
 An AI-powered CLI agent that can listen for commands, break them down into subtasks, and execute them with context from your local codebase.
 

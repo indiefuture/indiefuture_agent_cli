@@ -1,11 +1,11 @@
 pub mod agent_engine;
 pub mod ai;
 pub mod cli;
-pub mod codebase;
+//pub mod codebase;
 pub mod config;
 pub mod error;
 pub mod memory;
-pub mod task;
+//pub mod task;
 pub mod utils;
 
 pub mod subtasks;

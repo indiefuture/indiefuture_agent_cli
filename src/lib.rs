@@ -8,6 +8,8 @@ pub mod task;
 pub mod utils;
 pub mod agent_engine;
 
+pub mod subtasks;
+
 pub use error::{AgentError, AgentResult};
 
 // Re-export main types for easier access

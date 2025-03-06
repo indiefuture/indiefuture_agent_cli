@@ -13,7 +13,7 @@ use crate::config::Settings;
 use crate::error::{AgentError, AgentResult};
 use crate::memory::{MemoryManager, ShortTermMemory, VectorStore};
 use crate::task::{
-    SubTask, SubTaskType,   SubTaskExecutor,
+    SubTask, SubTaskType,    
     // Legacy imports
     OperationType, Task,  TaskExecutor, TaskStatus
 };
@@ -52,7 +52,7 @@ pub async fn ask_confirmation_for_subtask(
     
     
     // Set up the user confirmation callback
-    agent_engine.set_user_confirmation_callback(Box::new(|subtask: &SubTask| {
+    agent_engine.ask_user_confirmation(Box::new(|subtask: &SubTask| {
         // Get confirmation from the user
         println!("\n");
         

@@ -10,57 +10,10 @@ use crate::codebase::CodebaseScanner;
 use crate::error::{AgentError, AgentResult};
 use crate::memory::MemoryManager;
 
-/// Read subtask variants
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FilePathOrQuery {
-    /// Read a specific file path
-    FilePath(String),
-    /// Look for a file matching a description
-    FileQuery(String),
-}
 
-impl fmt::Display for FilePathOrQuery {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FilePathOrQuery::FilePath(path) => write!(f, "{}", path),
-            FilePathOrQuery::FileQuery(query) => write!(f, "query: {}", query),
-        }
-    }
-}
- 
-/// The type of subtask
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SubTaskType {
-    Task(String),   // ???? 
-    Read(FilePathOrQuery),
-    Update(FilePathOrQuery),
-    Search(String),
-    Bash(String),
-}
 
-impl SubTaskType {
-    pub fn description(&self) -> String {
-        match self {
-            SubTaskType::Task(desc) => desc.clone(),
 
-            SubTaskType::Read(path_or_query) => format!("Read file: {}", path_or_query) ,
-            SubTaskType::Update(path_or_query) => format!("Update file: {}", path_or_query) ,
-            SubTaskType::Search(desc) => format!("Search file: {}", desc) ,
-          
-            SubTaskType::Bash(cmd) => cmd.clone(),
-        }
-    }
 
-    pub fn icon(&self) -> &str {
-        match self {
-            SubTaskType::Task(_) => "📋",
-            SubTaskType::Read(_) => "👁️",
-            SubTaskType::Update(_) => "✏️",
-            SubTaskType::Search(_) => "🔎",
-            SubTaskType::Bash(_) => "🔧",
-        }
-    }
-}
 
 /// Status of a subtask
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

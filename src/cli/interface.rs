@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 
 
-  
+
 /// Main CLI entry point
 pub async fn run_cli(
 
@@ -81,10 +81,10 @@ pub async fn run_cli(
 
 
             Arc::clone( &shared_state ),
-            Arc::clone( &context_memory  )
+            Arc::clone( &context_memory  ),
             Arc::clone( &settings )
 
-              ).await 
+          ).await 
 
 
 

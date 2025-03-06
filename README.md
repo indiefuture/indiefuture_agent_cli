@@ -9,6 +9,8 @@ An AI-powered CLI agent that can listen for commands, break them down into subta
 
 ```
 
+start this bot with 'cargo r'  
+
 
 Tell this bot  to add 'hello world'  to the end of the readme of its own project 
 

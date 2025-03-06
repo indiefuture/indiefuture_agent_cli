@@ -1276,15 +1276,13 @@ impl SubtaskTool for GrepTool {
 
 
 
-
-
-
-#[derive(Serialize,Deserialize,Clone,Debug)]
-pub struct FileReadToolInputs  {
-   pub file_path: String,
-   pub limit: Option<u32>,
-   pub offset: Option<u32>
+#[derive(Clone,Debug,Serialize,Deserialize)]
+pub struct FileReadToolInputs { 
+    pub file_path: String, 
+    pub limit: Option<u32>, 
+    pub offset: Option<u32> 
 }
+
 
 
 
@@ -1292,19 +1290,129 @@ pub struct FileReadTool( FileReadToolInputs );  //query
  
 #[ async_trait ] 
 impl SubtaskTool for FileReadTool {
-    async fn handle_subtask(&self, _ai_client: &Box<dyn AiClient>, _context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
-
-
-
-
-
-            None
-
-
-     }
-
-
+    async fn handle_subtask(&self, _ai_client: &Box<dyn AiClient>, context_memory: Arc<Mutex<ContextMemory>>) -> Option<SubtaskOutput> {
+        use crate::memory::{MemoryFragment, MemoryMetadata};
+        use chrono::Utc;
+        use std::fs::File;
+        use std::io::{self, BufRead, BufReader};
+        use std::path::Path;
+        
+        // Extract input parameters
+        let file_path = &self.0.file_path;
+        let limit = self.0.limit;
+        let offset = self.0.offset.unwrap_or(0);
+        
+        // Log the operation
+        println!("📄 Reading file: {}", file_path);
+        if let Some(lim) = limit {
+            println!("   With limit: {} lines", lim);
+        }
+        if offset > 0 {
+            println!("   Starting at line: {}", offset);
+        }
+        
+        // Check if file exists and is readable
+        let path = Path::new(file_path);
+        if !path.exists() {
+            println!("⚠️ Error: File does not exist: {}", file_path);
+            return None;
+        }
+        
+        // Open and read the file
+        let file = match File::open(path) {
+            Ok(f) => f,
+            Err(e) => {
+                println!("⚠️ Error opening file: {}", e);
+                 return None;
+            }
+        };
+        
+        // Use BufReader for efficient line-by-line reading
+        let reader = BufReader::new(file);
+        let mut content = String::new();
+        let mut line_count = 0;
+        let mut total_lines = 0;
+        
+        // Read file line by line, respecting offset and limit
+        for (i, line_result) in reader.lines().enumerate() {
+            // Skip lines before the offset
+            if i < offset as usize {
+                continue;
+            }
+            
+            match line_result {
+                Ok(line) => {
+                    // Check if we've reached the limit
+                    if let Some(lim) = limit {
+                        if line_count >= lim {
+                            content.push_str("\n... (more lines not shown due to limit) ...");
+                            break;
+                        }
+                    }
+                    
+                    // Add the line to our content
+                    if line_count > 0 {
+                        content.push('\n');
+                    }
+                    content.push_str(&line);
+                    line_count += 1;
+                },
+                Err(e) => {
+                    println!("⚠️ Error reading line {}: {}", i, e);
+                    // Continue reading despite errors
+                }
+            }
+            total_lines = i + 1;
+        }
+        
+        // Create file metadata
+        let extension = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let file_name = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+        
+        // Create file type based on extension
+        let file_type = match extension {
+            "rs" => "rust_source",
+            "js" => "javascript_source",
+            "py" => "python_source",
+            "json" => "json_data",
+            "md" => "markdown",
+            "toml" => "toml_config",
+            _ => "text_file",
+        };
+        
+        // Create memory metadata
+        let memory_metadata = MemoryMetadata {
+            file_type: Some(file_type.to_string()),
+            path: Some(file_path.clone()),
+            timestamp: Some(Utc::now().timestamp()),
+            tags: vec![
+                "file_content".to_string(),
+                format!("file:{}", file_name),
+                format!("ext:{}", extension),
+            ],
+        };
+        
+        // Create memory fragment
+        let memory_fragment = MemoryFragment {
+            source: "file_read".to_string(),
+            content,
+            metadata: Some(memory_metadata),
+        };
+        
+        // Add to context memory
+        {
+            let mut memory = context_memory.lock().await;
+            memory.add_frag(memory_fragment.clone());
+        }
+        
+        // Log reading status
+        println!("✅ Read {} of {} total lines from file", line_count, total_lines);
+        
+        // Return memory fragment as output
+        Some(SubtaskOutput::AddToContextMemory(memory_fragment))
+    }
 }
+
 
 
 

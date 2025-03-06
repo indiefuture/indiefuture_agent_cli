@@ -524,6 +524,7 @@ impl SubTaskType {
 
     pub fn requires_user_permission(&self) -> bool {
         match self {
+            SubTaskType::Task( _ ) => true , 
             SubTaskType::Bash(_) => true,
 
             SubTaskType::FileEditTool(_) => true,

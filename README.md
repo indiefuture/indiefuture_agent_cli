@@ -2,6 +2,30 @@
 
 An AI-powered CLI agent that can listen for commands, break them down into subtasks, and execute them with context from your local codebase.
 
+
+
+
+### TRY ME 
+
+```
+
+
+Tell this bot  to add 'hello world'  to the end of the readme of its own project 
+
+
+it will :D  
+
+
+```
+
+
+
+
+
+
+
+
+
 ## Features
 
 - Interactive CLI interface using cliclack

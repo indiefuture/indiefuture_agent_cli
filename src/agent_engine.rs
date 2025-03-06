@@ -118,7 +118,17 @@ impl AgentEngine {
                 }
             }
 
-            let Some(next_subtask) = self.active_subtasks.pop() else {
+
+ 
+
+
+
+
+            let Some(next_subtask) = self.active_subtasks.pop() .clone() else {
+
+ 
+
+
                 //returns the last element !
                 break;
             };
@@ -151,6 +161,33 @@ impl AgentEngine {
                         .await;
 
                     spin.stop("Task analyzed ✓");
+
+
+
+
+
+
+
+
+
+
+
+
+                    let task_is_completed = match   next_subtask.subtask .clone() {
+
+                    	SubTaskType::Task( _ ) => false, // for now 
+                    	_ => true 
+                    }; 
+
+                    if !task_is_completed {  //re push self to stack 
+                    	 cliclack::log::info("⨯ Task not yet complete - retrying with more context ").expect("Failed to log");
+                    	self.push_subtask(next_subtask.subtask.clone() );
+                    }
+
+
+
+
+
 
                     match subtask_output {
                         SubtaskOutput::AddToContextMemory(ref memory_fragment) => {
@@ -187,9 +224,19 @@ impl AgentEngine {
                         }
                     }
 
-                    cliclack::log::info(format!(" {:?}", subtask_output)).expect("Failed to log");
+
+
+
+
+ 
+
+                   // cliclack::log::info(format!(" {:?}", subtask_output)).expect("Failed to log");
                 }
                 false => {
+
+
+                 
+
                     cliclack::log::info("⨯ Operation declined").expect("Failed to log");
                     break;
                 }

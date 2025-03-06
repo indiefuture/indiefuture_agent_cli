@@ -1,0 +1,30 @@
+{
+  "Fantasy Book Agent": {
+    "url": "http://localhost:9000/api/webhook",
+    "manifest_url": null,
+    "indiefuture_client_api_key": null,
+    "description": "Provides data about fantasy books.",
+    "functions": null
+  },
+  "weatherbot": {
+    "url": "http://localhost:9000/api/webhook",
+    "manifest_url": null,
+    "indiefuture_client_api_key": "10ace5c1c4ea15502a4c70f6368bd757",
+    "description": "Provides data about the weather",
+    "functions": null
+  },
+  "Defirelay Agent": {
+    "url": "http://localhost:9001/api/webhook",
+    "manifest_url": null,
+    "indiefuture_client_api_key": null,
+    "description": "Allows for registering a new workspace by UUID to add an agent apikey or load credits into a apikey.",
+    "functions": null
+  },
+  "balance_bot": {
+    "url": "http://localhost:9000/api/webhook",
+    "manifest_url": null,
+    "indiefuture_client_api_key": null,
+    "description": "Returns balances for ethereums wallets ",
+    "functions": null
+  }
+}

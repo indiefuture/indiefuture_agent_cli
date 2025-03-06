@@ -511,6 +511,8 @@ impl SubTaskType {
             
             SubTaskType::FileEditTool(_) => true,
 
+            SubTaskType::ProtoSubtask(_) => true,
+
             _ => false 
         }
     }

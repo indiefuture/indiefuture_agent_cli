@@ -522,8 +522,18 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
             }
         }
 
-        // Push subtasks to the queue
-        Some(SubtaskOutput::PushSubtasksIncrementDepth(built_sub_tasks))
+        // Check if we have multiple subtasks and need to process them in sequence
+        if built_sub_tasks.len() > 1 {
+            println!("✅ Received multiple tool calls: {} tools", built_sub_tasks.len());
+            // Push subtasks to the queue with depth increment for proper execution flow
+            Some(SubtaskOutput::PushSubtasksIncrementDepth(built_sub_tasks))
+        } else if built_sub_tasks.len() == 1 {
+            // Just a single subtask - use the simpler form
+            Some(SubtaskOutput::PushSubtasksIncrementDepth(built_sub_tasks))
+        } else {
+            println!("WARN: No valid subtasks created from tool calls");
+            None
+        }
     }
 }
 

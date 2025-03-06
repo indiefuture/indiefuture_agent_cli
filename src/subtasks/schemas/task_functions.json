@@ -15,7 +15,7 @@
   },
   {
     "name": "Task",
-    "description": "Create a task for general AI assistance, analysis, or processing. Use only for high-level analysis or information that can't be obtained through other specialized tools.",
+    "description": "Create a multiple subtask for general AI assistance, analysis, or processing. Use this if the query is too complex to handle with the other tools alone.",
     "parameters": {
       "type": "object",
       "properties": {

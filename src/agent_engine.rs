@@ -186,17 +186,16 @@ impl AgentEngine {
 						   	}
 
 						   	SubtaskOutput::PushSubtasksIncrementDepth( ref new_tasks_array  ) => {
-						   		for new_subtask in new_tasks_array {
-
-						   		     	//increment depth here !?
-
-						   		     self.increment_subtask_depth(   );
-						   			 self.push_subtask(  new_subtask.clone()  ); 
-
+						   		// Only increment the depth once for all subtasks in the array
+						   		if !new_tasks_array.is_empty() {
+						   		    println!("Adding {} subtasks at increased depth", new_tasks_array.len());
+						   		    self.increment_subtask_depth();
+						   		    
+						   		    // Add all subtasks at the same depth level
+						   		    for new_subtask in new_tasks_array {
+						   			    self.push_subtask(new_subtask.clone()); 
+						   		    }
 						   		}
-						   		 
-
-
 						   	} 
 
 						   	_ => {  
@@ -254,4 +253,3 @@ pub struct SharedState {
     pub ai_client: Box<dyn AiClient>
 
 }
-

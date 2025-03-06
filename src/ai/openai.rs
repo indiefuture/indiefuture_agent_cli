@@ -202,7 +202,6 @@ impl AiClient for OpenAiClient {
 
             let mut function_tools = Vec::new();
 
-            println!("fns {:?}", functions);
 
             if let Some(functions_array) = functions.as_array(){
 
@@ -221,6 +220,8 @@ impl AiClient for OpenAiClient {
                     
             }
 
+               println!("api_messages {:?}", api_messages);
+           
 
             println!("function_tools {:?}", function_tools);
 
@@ -234,11 +235,11 @@ impl AiClient for OpenAiClient {
                              "model": "gpt-4o" ,
 
                             "messages": api_messages,
-                            "temperature": 0.2,  // Lower temperature for more deterministic responses
-                            "max_tokens": 4000,  // Ensure enough tokens for multiple tool calls
+                            "temperature": 0.7,  // Lower temperature for more deterministic responses
+                            "max_tokens": 8000,  // Ensure enough tokens for multiple tool calls
 
                             "tools": function_tools,
-                            "tool_choice": "required",  // Allow multiple tool calls
+                            "tool_choice": "auto",  // Allow multiple tool calls
                             "parallel_tool_calls" : true
                         }),
 

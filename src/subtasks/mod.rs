@@ -90,24 +90,14 @@ impl SubTask {
 }
 
 
+ pub struct TaskTool(String);  //query 
  
-
-pub struct TaskTool(String);  //query 
- 
-#[ async_trait ] 
+#[async_trait] 
 impl SubtaskTool for TaskTool {
+    async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput> {
+        let input = &self.0;
 
- 
-
-
-		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput>  { 
-
-
-
-
-
-
-                let system_prompt = r#"
+        let system_prompt = r#"
 You are an expert AI assistant for a command-line tool that can help with various tasks.
 Your job is to analyze user requests and determine what operations to perform.
 You must select the most appropriate operations to complete a user's request.
@@ -231,178 +221,171 @@ You must select the most appropriate operations to complete a user's request.
         ];
 
         // Call AI with function calling enabled
-        let response = ai_client
+        let response = match ai_client
             .chat_completion_with_functions(messages, functions)
-            .await?;
+            .await {
+                Ok(resp) => resp,
+                Err(_) => return None,
+            };
         
         // Process function calls if any
-        let  Some(function_call) = response.function_call else {
-
-            return None 
+        let Some(function_call) = response.function_call else {
+            return None;
         };
 
-
-
-            let function_name = function_call.name.as_str();
-            let args: serde_json::Value = serde_json::from_str(&function_call.arguments)?;
+        let function_name = function_call.name.as_str();
+        let args: serde_json::Value = match serde_json::from_str(&function_call.arguments) {
+            Ok(args) => args,
+            Err(_) => return None,
+        };
             
-            // We're not using this variable directly, just checking if parameter exists in function args
-            let _description = args["description"].as_str()
-                .ok_or_else(|| AgentError::AiApi("Missing description parameter".to_string()))?
-                .to_string();
+        // Log that we got a function call
+        info!("Processing function: {}", function_name);
             
-            // Log that we got a function call
-            info!("Processing function: {}", function_name).expect("Failed to log");
+        // Create the appropriate subtask based on the function call
+        let subtask = match function_name {
+            "create_task" => {
+                // Extract description parameter
+                let description = match args["description"].as_str() {
+                    Some(desc) => desc.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                info!("Adding task: {}", description);
+                
+                SubTask::new(SubTaskType::Task(description), None)
+            },
             
-            // Create the appropriate subtask based on the function call
-            let subtask = match function_name {
-                "create_task" => {
-                    // Extract description parameter
-                    let description = args["description"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing description parameter".to_string())).ok()?
-                        .to_string();
-                    
-                    // Log it
-                    info!("Adding task: {}", description).expect("Failed to log");
-                    
-                    SubTask::new(SubTaskType::Task(description), None)
-                },
+            "read_file_at_path" => {
+                // Extract file_path parameter
+                let file_path = match args["file_path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
                 
-                "read_file_at_path" => {
-                    // Extract file_path parameter
-                    let file_path = args["file_path"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing file_path parameter".to_string())).ok()?
-                        .to_string();
-                    
-                    // Log it
-                    info!("Adding read file subtask: {}", file_path).expect("Failed to log");
-                    
-                    SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(file_path)), None)
-                },
+                // Log it
+                info!("Adding read file subtask: {}", file_path);
                 
-                "read_file_from_lookup" => {
-                    // Extract lookup_query parameter
-                    let lookup_query = args["lookup_query"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing lookup_query parameter".to_string())).ok()?
-                        .to_string();
-                    
-                    // Log it
-                    info!("Adding read lookup subtask: {}", lookup_query).expect("Failed to log");
-                    
-                    SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(lookup_query)), None)
-                },
-                
-                "update_file_at_path" => {
-                    // Extract file_path parameter
-                    let file_path = args["file_path"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing file_path parameter".to_string())).ok()?
-                        .to_string();
-                    
-                    // Log it
-                    info!("Adding update file subtask: {}", file_path).expect("Failed to log");
-                    
-                    SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(file_path)), None)
-                },
-                
-                "update_file_from_lookup" => {
-                    // Extract lookup_query parameter
-                    let lookup_query = args["lookup_query"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing lookup_query parameter".to_string())).ok()?
-                        .to_string();
-                    
-                    // Log it
-                    info!("Adding update lookup subtask: {}", lookup_query);
-                    
-                    SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(lookup_query)), None)
-                },
-                
-                "search_for_file" => {
-                    // Extract query parameter
-                    let query = args["query"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing query parameter".to_string())).ok()?
-                        .to_string();
-                    
-                    // Log it
-                    info!("Adding search subtask: {}", query);
-                    
-                    SubTask::new(SubTaskType::Search(query.to_string()), None)
-                },
-                
-                "create_bash" => {
-                    // Extract command parameter
-                    let command = args["command"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing command parameter".to_string())).ok()?
-                        .to_string();
-                    
-                    // Log it
-                    info!("Adding bash subtask: {}", command);
-                    
-                    SubTask::new(SubTaskType::Bash(command), None)
-                },
-                
-                // Support legacy function names for backward compatibility
-                "create_read" => {
-                    let description = args["description"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing description parameter".to_string()))?
-                        .to_string();
-                    
-                    if description.starts_with('/') || description.starts_with("./") {
-                        info!("Adding legacy read file subtask: {}", description);
-                        SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(description)), None)
-                    } else {
-                        info!("Adding legacy read lookup subtask: {}", description);
-                        SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(description)), None)
-                    }
-                },
-                
-                "create_update" => {
-                    let description = args["description"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing description parameter".to_string()))?
-                        .to_string();
-                    
-                    info!("Adding legacy update subtask: {}", description);
-                    
-                    if description.starts_with('/') || description.starts_with("./") {
-                        SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(description)), None)
-                    } else {
-                        SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(description)), None)
-                    }
-                },
-                
-                "create_search" => {
-                    let description = args["description"].as_str()
-                        .ok_or_else(|| AgentError::AiApi("Missing description parameter".to_string()))?
-                        .to_string();
-                    
-                    info!("Adding legacy search subtask: {}", description);
-                    
-                    SubTask::new(SubTaskType::Search( description ), None)
-                },
-                
-                _ => return None,
-            };
+                SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(file_path)), None)
+            },
             
-            // Add the subtask to the queue
-          //  self.add_queued_subtask(subtask);
+            "read_file_from_lookup" => {
+                // Extract lookup_query parameter
+                let lookup_query = match args["lookup_query"].as_str() {
+                    Some(query) => query.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                info!("Adding read lookup subtask: {}", lookup_query);
+                
+                SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(lookup_query)), None)
+            },
+            
+            "update_file_at_path" => {
+                // Extract file_path parameter
+                let file_path = match args["file_path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                info!("Adding update file subtask: {}", file_path);
+                
+                SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(file_path)), None)
+            },
+            
+            "update_file_from_lookup" => {
+                // Extract lookup_query parameter
+                let lookup_query = match args["lookup_query"].as_str() {
+                    Some(query) => query.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                info!("Adding update lookup subtask: {}", lookup_query);
+                
+                SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(lookup_query)), None)
+            },
+            
+            "search_for_file" => {
+                // Extract query parameter
+                let query = match args["query"].as_str() {
+                    Some(q) => q.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                info!("Adding search subtask: {}", query);
+                
+                SubTask::new(SubTaskType::Search(query), None)
+            },
+            
+            "create_bash" => {
+                // Extract command parameter
+                let command = match args["command"].as_str() {
+                    Some(cmd) => cmd.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                info!("Adding bash subtask: {}", command);
+                
+                SubTask::new(SubTaskType::Bash(command), None)
+            },
+            
+            // Support legacy function names for backward compatibility
+            "create_read" => {
+                let description = match args["description"].as_str() {
+                    Some(desc) => desc.to_string(),
+                    None => return None,
+                };
+                
+                if description.starts_with('/') || description.starts_with("./") {
+                    info!("Adding legacy read file subtask: {}", description);
+                    SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(description)), None)
+                } else {
+                    info!("Adding legacy read lookup subtask: {}", description);
+                    SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(description)), None)
+                }
+            },
+            
+            "create_update" => {
+                let description = match args["description"].as_str() {
+                    Some(desc) => desc.to_string(),
+                    None => return None,
+                };
+                
+                info!("Adding legacy update subtask: {}", description);
+                
+                if description.starts_with('/') || description.starts_with("./") {
+                    SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(description)), None)
+                } else {
+                    SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(description)), None)
+                }
+            },
+            
+            "create_search" => {
+                let description = match args["description"].as_str() {
+                    Some(desc) => desc.to_string(),
+                    None => return None,
+                };
+                
+                info!("Adding legacy search subtask: {}", description);
+                
+                SubTask::new(SubTaskType::Search(description), None)
+            },
+            
+            _ => return  None ,
+        };
+        
+        // Extract the SubTaskType from the SubTask
+        let subtask_type = subtask.task_type;
 
-            // Extract the SubTaskType from the SubTask
-            let subtask_type = subtask.task_type;
-
-            return Some(SubtaskOutput::PushSubtasksIncrementDepth(vec![subtask_type]))
-
-
-  
-
-
-
-
-
-		 }
-
-
+        Some(SubtaskOutput::PushSubtasksIncrementDepth(vec![subtask_type]))
+    }
 }
-
-
 
 
 
@@ -527,31 +510,7 @@ impl fmt::Display for FilePathOrQuery {
         }
     }
 }
-
-impl SubTaskType {
-    pub fn description(&self) -> String {
-        match self {
-            SubTaskType::Task(desc) => desc.clone(),
-
-            SubTaskType::Read(path_or_query) => format!("Read file: {}", path_or_query) ,
-            SubTaskType::Update(path_or_query) => format!("Update file: {}", path_or_query) ,
-            SubTaskType::Search(desc) => format!("Search file: {}", desc) ,
-          
-            SubTaskType::Bash(cmd) => cmd.clone(),
-        }
-    }
-
-    pub fn icon(&self) -> &str {
-        match self {
-            SubTaskType::Task(_) => "📋",
-            SubTaskType::Read(_) => "👁️",
-            SubTaskType::Update(_) => "✏️",
-            SubTaskType::Search(_) => "🔎",
-            SubTaskType::Bash(_) => "🔧",
-        }
-    }
-}
-
+ 
 
 
 

@@ -1,6 +1,4 @@
-
-
- use cliclack::{self, spinner, confirm, log};
+use cliclack::{self, spinner, confirm, log};
  
 use crate::SubTask;
 use crate::AiClient;
@@ -60,7 +58,7 @@ impl AgentEngine {
         )).expect("Failed to log");
         
         // Create a temporary SubTask object for the callback
-        let subtask = SubTask::new(subtask_type, None);
+        let _subtask = SubTask::new(subtask_type, None);
         
         // If a custom callback is provided, use it
        
@@ -73,45 +71,33 @@ impl AgentEngine {
     }
      
 
-        pub async fn perform_subtask(&self, subtask_type: SubTaskType, settings: Arc<Settings>) -> SubtaskOutput {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+    pub async fn perform_subtask(&self, subtask_type: SubTaskType, settings: Arc<Settings>) -> SubtaskOutput {
+        // Get the appropriate tool for this subtask type
+        let tool = subtask_type.get_tool();
+        
+        // Create AI client as needed
+        let api_key = settings.claude_api_key.as_ref()
+            .cloned()
+            .unwrap_or_else(|| "dummy_key".to_string());
+        let model = &settings.default_model;
+        
+        let ai_client = match crate::ai::claude::ClaudeClient::new(&api_key, model) {
+            Ok(client) => Arc::new(client) as Arc<dyn AiClient>,
+            Err(_) => {
+                // Return early if we can't create a client
+                return SubtaskOutput::SubtaskComplete();
+            }
+        };
+        
+        // Execute the subtask
+        match tool.handle_subtask(ai_client).await {
+            Some(output) => output,
+            None => SubtaskOutput::SubtaskComplete()
         }
+    }
 
 
  /*
-
 
 
  */
@@ -119,8 +105,8 @@ impl AgentEngine {
 	pub async fn handle_subtasks( 
 		&mut self, 
 
-		shared_state: Arc<SharedState>, 
-		context_memory: Arc< ContextMemory  >,
+		_shared_state: Arc<SharedState>, 
+		_context_memory: Arc< ContextMemory  >,
 		settings: Arc<Settings> 
 
 		){
@@ -135,8 +121,7 @@ impl AgentEngine {
 
 
 
-
-			if let Some( next_subtask)  = self.active_subtasks.last () {
+			if let Some( _next_subtask)  = self.active_subtasks.last () {
 
 
 			}
@@ -156,8 +141,11 @@ impl AgentEngine {
 
 					    let spin = spinner();
     					spin.start("Processing task...");
-					   self.perform_subtask(  next_subtask.subtask , Arc::clone( &settings )  ).await; 
+					  let subtask_output =  self.perform_subtask(  next_subtask.subtask , Arc::clone( &settings )  ).await; 
 					   spin.stop("Task analyzed ✓");
+
+					   	  cliclack::log::info(format!(" {:?}" , subtask_output ) ).expect("Failed to log");
+
 				}
 				false => {
 					cliclack::log::info("⨯ Operation declined").expect("Failed to log");
@@ -183,6 +171,7 @@ impl AgentEngine {
 
 
 
+#[derive(Debug)]
 pub enum SubtaskOutput {
 	PushSubtasksIncrementDepth(Vec<SubTaskType>),  // add subtasks in a deeper depth to try and grow context -- once those are all popped off and handled, we have more context to try again !  
 	SubtaskComplete(),  //we have enough context to do an AI Query or to move on  
@@ -197,6 +186,4 @@ pub struct SharedState {
     pub ai_client: Box<dyn AiClient>
 
 }
-
-
 

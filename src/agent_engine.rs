@@ -82,7 +82,6 @@ impl AgentEngine {
 
 
 
-        	
 
 
 
@@ -101,7 +100,8 @@ impl AgentEngine {
 
 
 
-        	
+
+
 
 
 
@@ -133,7 +133,17 @@ impl AgentEngine {
 
 		loop {
 
-			let Some(next_subtask) = self.active_subtasks.pop() else {
+
+
+
+			let Some( next_subtask)  = self.active_subtasks.last () {
+
+
+			}
+
+
+
+			let Some(next_subtask) = self.active_subtasks.pop() else {   //returns the last element ! 
 				break;
 			};
 
@@ -176,9 +186,11 @@ impl AgentEngine {
 pub enum SubtaskOutput {
 
 
-	PushSubtasksIncrementDepth,  // add subtasks in a deeper depth to try and grow context to try again 
+	PushSubtasksIncrementDepth,  // add subtasks in a deeper depth to try and grow context -- once those are all popped off and handled, we have more context to try again !  
 
-	SubtaskComplete (   )
+	SubtaskComplete (   ),  //we have enough context to do an AI Query or to move on  
+
+	//SubtaskFailed, // we are giving up . when would this happen ? 
 
 
 

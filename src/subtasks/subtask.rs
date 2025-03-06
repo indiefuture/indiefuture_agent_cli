@@ -199,10 +199,10 @@ impl SubTaskType {
                 })
             },
             
-            "ExplainTool" => {
+            "Explain" => {
                 let query = match args["query"].as_str() {
                     Some(q) => q.to_string(),
-                    None => return None,
+                    None =>   "".into(),
                 };
                 
                 let _ = cliclack::log::info(format!("Adding explain subtask: {}", query));
@@ -210,28 +210,9 @@ impl SubTaskType {
                 SubTaskType::ExplainTool(query)
             },
             
-            // Support legacy function names for backward compatibility
-            "create_task" => {
-                let description = match args["description"].as_str() {
-                    Some(desc) => desc.to_string(),
-                    None => return None,
-                };
-                
-                let _ = cliclack::log::info(format!("Legacy function: create_task -> Task: {}", description));
-                SubTaskType::Task(description) 
-            },
             
-            "create_bash" => {
-                let command = match args["command"].as_str() {
-                    Some(cmd) => cmd.to_string(),
-                    None => return None,
-                };
-                
-                let _ = cliclack::log::info(format!("Legacy function: create_bash -> Bash: {}", command));
-                SubTaskType::Bash(command) 
-            },
             
-            "View" | "ReadFile" | "read_file_at_path" => {
+            "View" | "ReadFile"   => {
                 let file_path = match args["file_path"].as_str() {
                     Some(path) => path.to_string(),
                     None => return None,
@@ -287,58 +268,7 @@ impl SubTaskType {
                 })
             },
             
-            // Additional legacy mappings
-            "read_file_from_lookup" | "create_read" => {
-                let file_path = if function_name == "read_file_from_lookup" {
-                    match args["lookup_query"].as_str() {
-                        Some(query) => query.to_string(),
-                        None => return None,
-                    }
-                } else {
-                    // create_read
-                    match args["description"].as_str() {
-                        Some(desc) => desc.to_string(),
-                        None => return None,
-                    }
-                };
-                
-                let _ = cliclack::log::info(format!("Legacy function: {} -> FileReadTool: {}", function_name, file_path));
-                
-                SubTaskType::FileReadTool(FileReadToolInputs {
-                    file_path,
-                    limit: None,
-                    offset: None
-                })
-            },
-            
-            "update_file_at_path" | "update_file_from_lookup" | "create_update" => {
-                // Legacy update functions - cannot be directly converted
-                let _ = cliclack::log::info(format!("Legacy update function cannot be converted: {}", function_name));
-                return None;
-            },
-            
-            "search_for_file" | "create_search" => {
-                let pattern = if function_name == "search_for_file" {
-                    match args["query"].as_str() {
-                        Some(q) => q.to_string(),
-                        None => return None,
-                    }
-                } else {
-                    // create_search
-                    match args["description"].as_str() {
-                        Some(desc) => desc.to_string(),
-                        None => return None,
-                    }
-                };
-                
-                let _ = cliclack::log::info(format!("Legacy function: {} -> GrepTool: {}", function_name, pattern));
-                
-                SubTaskType::GrepTool(GrepToolInputs {
-                    pattern,
-                    include: None,
-                    path: None
-                })
-            },
+         
             
             _ => {
                 let _ = cliclack::log::info(format!("Unknown function: {}", function_name));
@@ -436,7 +366,7 @@ impl SubtaskTool for TaskTool {
         let input = &self.0;
 
         let system_prompt = r#"
-You are an expert AI assistant for a command-line tool that helps with software development tasks.
+You are an expert AI assistant for a command-line tool that helps with software development tasks of a local codebase.
 Your job is to analyze user requests and determine what operations to perform.
 
 IMPORTANT: You MUST recommend multiple tools (at least 2-3) to complete the task in a step-by-step fashion. 
@@ -453,15 +383,6 @@ For example, if asked to "explain the logging system in this codebase", you shou
 3. Use FileReadTool to examine the most relevant files in detail
 4. Finally use ExplainTool to provide a comprehensive explanation based on all gathered information
 
-Available tools:
-1. GlobTool - For finding files matching patterns (e.g., "**/*.rs")
-2. GrepTool - For searching content in files (e.g., finding text patterns)
-3. FileReadTool - For reading file contents
-4. LSTool - For listing directory contents 
-5. Bash - For executing bash commands (use for running tests, builds, etc.)
-6. FileEditTool - For editing files (making code changes)
-7. ExplainTool - For providing explanations based on all gathered context (use as the final step)
-8. Task - For general AI assistance (use only when other tools won't work)
 
 Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer based on all gathered information.
 "#;
@@ -526,10 +447,10 @@ Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer b
         if built_sub_tasks.len() > 1 {
             println!("✅ Received multiple tool calls: {} tools", built_sub_tasks.len());
             // Push subtasks to the queue with depth increment for proper execution flow
-            Some(SubtaskOutput::PushSubtasksIncrementDepth(built_sub_tasks))
+            Some(SubtaskOutput::PushSubtasks(built_sub_tasks))
         } else if built_sub_tasks.len() == 1 {
             // Just a single subtask - use the simpler form
-            Some(SubtaskOutput::PushSubtasksIncrementDepth(built_sub_tasks))
+            Some(SubtaskOutput::PushSubtasks(built_sub_tasks))
         } else {
             println!("WARN: No valid subtasks created from tool calls");
             None

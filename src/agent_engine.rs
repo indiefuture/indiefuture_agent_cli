@@ -26,7 +26,7 @@ pub struct AgentEngine {
 
 
 
-
+#[derive(Clone,Debug)]
 pub struct SubtaskSlot { depth: usize, subtask:  SubTaskType } 
 
 
@@ -165,7 +165,7 @@ impl AgentEngine {
 
 
 					  let subtask_output =  self.perform_subtask(  
-					    	next_subtask.subtask ,
+					    	next_subtask.subtask .clone() ,
 					    	Arc::clone( &context_memory ),
 					  	    Arc::clone( &shared_state ), 
 					  	    Arc::clone( &settings ) 
@@ -185,17 +185,42 @@ impl AgentEngine {
 
 						   	}
 
-						   	SubtaskOutput::PushSubtasksIncrementDepth( ref new_tasks_array  ) => {
-						   		// Only increment the depth once for all subtasks in the array
-						   		if !new_tasks_array.is_empty() {
-						   		    println!("Adding {} subtasks at increased depth", new_tasks_array.len());
-						   		    self.increment_subtask_depth();
-						   		    
-						   		    // Add all subtasks at the same depth level
-						   		    for new_subtask in new_tasks_array {
-						   			    self.push_subtask(new_subtask.clone()); 
-						   		    }
+						  SubtaskOutput::PushSubtasks ( ref new_tasks_array  ) => {
+
+
+						   		//self.push_subtask( next_subtask.subtask.clone() );  //lets come back to this after we handle the lower depth tasks we are about to create ! 
+
+						   		for new_subtask in new_tasks_array {
+
+						   		     	//increment depth here !?
+
+						   		     
+						   			 self.push_subtask(  new_subtask.clone()  ); 
+
 						   		}
+						   		 
+
+
+						   	} 
+
+
+						   	// we are going to try and do a bunch of subtasks and then come back and re-attempt this with better context 
+						   	SubtaskOutput::PushSubtasksIncrementDepth( ref new_tasks_array  ) => {
+
+
+						   		self.push_subtask( next_subtask.subtask.clone() );  //lets come back to this after we handle the lower depth tasks we are about to create ! 
+
+						   		for new_subtask in new_tasks_array {
+
+						   		     	//increment depth here !?
+
+						   		     self.increment_subtask_depth(   );
+						   			 self.push_subtask(  new_subtask.clone()  ); 
+
+						   		}
+						   		 
+
+
 						   	} 
 
 						   	_ => {  
@@ -238,7 +263,7 @@ impl AgentEngine {
 #[derive(Debug)]
 pub enum SubtaskOutput {
 	PushSubtasksIncrementDepth(Vec<SubTaskType>),  // add subtasks in a deeper depth to try and grow context -- once those are all popped off and handled, we have more context to try again !  
-		
+	 PushSubtasks (Vec<SubTaskType>), 
 	AddToContextMemory( MemoryFragment  ),
 
 	SubtaskComplete(),  //we have enough context to do an AI Query or to move on  
@@ -253,3 +278,4 @@ pub struct SharedState {
     pub ai_client: Box<dyn AiClient>
 
 }
+

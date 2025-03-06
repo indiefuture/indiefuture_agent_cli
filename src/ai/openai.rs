@@ -235,12 +235,12 @@ impl AiClient for OpenAiClient {
                              "model": "gpt-4o" ,
 
                             "messages": api_messages,
-                            "temperature": 0.7,  // Lower temperature for more deterministic responses
-                            "max_tokens": 8000,  // Ensure enough tokens for multiple tool calls
+                         //   "temperature": 0.7,  // Lower temperature for more deterministic responses
+                        //    "max_completion_tokens": 8000,  // Ensure enough tokens for multiple tool calls
 
                             "tools": function_tools,
-                            "tool_choice": "auto",  // Allow multiple tool calls
-                            "parallel_tool_calls" : true
+                            "tool_choice": "required",  // Allow multiple tool calls
+                             "parallel_tool_calls" : true
                         }),
 
                     false => json!({
@@ -261,20 +261,7 @@ impl AiClient for OpenAiClient {
             println!("request_body {:?}", request_body);
 
 
-
-
-/*
-        let request = OpenAiCompletionRequest {
-            model: self.model.clone(),
-            messages: api_messages,
-            temperature: 0.7,
-            max_tokens: Some(4000),
-            functions: Some(functions),
-
-            function_call: Some(json!({"name": "required"})), // Properly formatted to force function calling
-
-           // function_call: json!("required").into()   //Some(json!("auto")),
-        };*/
+ 
         
         let response = self
             .client

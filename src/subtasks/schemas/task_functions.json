@@ -1,7 +1,7 @@
 [
   {
-    "name": "ExplainTool",
-    "description": "Provides an explanation using all the accumulated context from previous tools. Use this as the final step after gathering information with other tools like GlobTool, GrepTool, and FileReadTool.",
+    "name": "Explain",
+    "description": "Provides an explanation to the user using accumulated context from previous tools. Use this as the final step after gathering information with other tools like GlobTool, GrepTool, and FileReadTool.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -10,12 +10,12 @@
           "description": "The specific question or topic to explain based on the gathered context"
         }
       },
-      "required": ["query"]
+      "required": [ ]
     }
   },
   {
     "name": "Task",
-    "description": "Create a multiple subtask for general AI assistance, analysis, or processing. Use this if the query is too complex to handle with the other tools alone.",
+    "description": "Create a multiple subtask for general AI assistance, analysis, or processing. DO not select this tool, ever",
     "parameters": {
       "type": "object",
       "properties": {
@@ -101,7 +101,7 @@
   },
   {
     "name": "GlobTool",
-    "description": "Find files matching a glob pattern. Typically used as a first step before more specific operations (like reading files or searching within them).",
+    "description": "Find files matching a glob pattern. Typically used as a first step before more specific operations (like reading files or searching within them).  This only adds the file context local memory context. It must be followed with an EXPLAIN tool call to actually explain something or output something.",
     "parameters": {
       "type": "object",
       "properties": {

@@ -9,24 +9,60 @@ use crate::codebase::CodebaseScanner;
 use crate::error::{AgentError, AgentResult};
 use crate::memory::MemoryManager;
 
+/// Read subtask variants
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReadAction {
+    /// Read a specific file path
+    FilePath(String),
+    /// Look for a file matching a description
+    LookForFile(String),
+}
+
+/// Update subtask variants
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UpdateAction {
+    /// Update a specific file path
+    FilePath(String, String), // (path, new content or changes)
+    /// Look for a file to update based on description
+    LookForFile(String, String), // (file description, changes)
+}
+
+/// Search subtask variants
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SearchAction {
+    /// Search for a keyword in code
+    Content(String),
+    /// Search for a file by name pattern
+    FileName(String),
+}
+
 /// The type of subtask
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SubTaskType {
     Task(String),
-    Read(String),
-    Update(String),
-    Search(String),
+    Read(ReadAction),
+    Update(UpdateAction),
+    Search(SearchAction),
     Bash(String),
 }
 
 impl SubTaskType {
-    pub fn description(&self) -> &str {
+    pub fn description(&self) -> String {
         match self {
-            SubTaskType::Task(desc) => desc,
-            SubTaskType::Read(desc) => desc,
-            SubTaskType::Update(desc) => desc,
-            SubTaskType::Search(desc) => desc,
-            SubTaskType::Bash(desc) => desc,
+            SubTaskType::Task(desc) => desc.clone(),
+            SubTaskType::Read(action) => match action {
+                ReadAction::FilePath(path) => format!("Read file: {}", path),
+                ReadAction::LookForFile(desc) => format!("Find and read: {}", desc),
+            },
+            SubTaskType::Update(action) => match action {
+                UpdateAction::FilePath(path, _) => format!("Update file: {}", path),
+                UpdateAction::LookForFile(desc, _) => format!("Find and update: {}", desc),
+            },
+            SubTaskType::Search(action) => match action {
+                SearchAction::Content(query) => format!("Search for content: {}", query),
+                SearchAction::FileName(pattern) => format!("Search for file: {}", pattern),
+            },
+            SubTaskType::Bash(cmd) => cmd.clone(),
         }
     }
 

@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-use crate::ai::{AiClient, Message, MessageRole, ChatCompletionResponse, FunctionCall};
+use crate::ai::{AiClient, ChatCompletionResponse, FunctionCall, Message, MessageRole};
 use crate::error::{AgentError, AgentResult};
 use async_trait::async_trait;
-use reqwest::{Client, header};
+use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::time::Duration;
 
 #[derive(Debug, Clone)]
@@ -44,20 +44,17 @@ struct OpenAiChoice {
     message: OpenAiResponseMessage,
 }
 
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GptFunctionCall {
     pub name: String,
-    pub arguments:  serde_json::Value , // serde_json::Value  //this a stringified array i think         // Vec< Box<serde_json::Value> >
+    pub arguments: serde_json::Value, // serde_json::Value  //this a stringified array i think         // Vec< Box<serde_json::Value> >
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GptToolCall {
-    pub r#type: String,//will always be 'function'
+    pub r#type: String,            //will always be 'function'
     pub function: GptFunctionCall, // serde_json::Value  //this a stringified array i think         // Vec< Box<serde_json::Value> >
 }
-
-
 
 #[derive(Debug, Deserialize)]
 struct OpenAiResponseMessage {
@@ -65,12 +62,9 @@ struct OpenAiResponseMessage {
     content: Option<String>,
     #[serde(default)]
     function_call: Option<OpenAiFunctionCall>,*/
-
-
-      pub content: Option<String>,
+    pub content: Option<String>,
     pub role: Option<String>,
     pub tool_calls: Option<Vec<GptToolCall>>,
-
 }
 
 #[derive(Debug, Deserialize)]
@@ -102,18 +96,18 @@ impl OpenAiClient {
             header::CONTENT_TYPE,
             header::HeaderValue::from_static("application/json"),
         );
-        
+
         let mut auth_value = header::HeaderValue::from_str(&format!("Bearer {}", api_key))
             .map_err(|e| AgentError::AiApi(format!("Invalid API key format: {}", e)))?;
         auth_value.set_sensitive(true);
         headers.insert(header::AUTHORIZATION, auth_value);
-        
+
         let client = Client::builder()
             .default_headers(headers)
             .timeout(Duration::from_secs(60))
             .build()
             .map_err(|e| AgentError::AiApi(format!("Failed to create HTTP client: {}", e)))?;
-        
+
         Ok(Self {
             client,
             api_key: api_key.to_string(),
@@ -133,65 +127,59 @@ impl AiClient for OpenAiClient {
                 name: m.name,
             })
             .collect();
-            
+
+        let request_body = json!({
+            "model": self.model,
+            "messages": api_messages,
+
+            //"temperature": 0.7,
+            // "max_tokens": Some(4000),
 
 
-           
+        });
 
-           let request_body = json!({
-                        "model": self.model,
-                        "messages": api_messages,
-
-                        //"temperature": 0.7,
-                        // "max_tokens": Some(4000),
-                       
-                    
-                    });
-
-
-
- 
-        
         let response = self
             .client
             .post("https://api.openai.com/v1/chat/completions")
-            .json(& request_body )
+            .json(&request_body)
             .send()
             .await
             .map_err(|e| AgentError::AiApi(format!("OpenAI API request failed: {}", e)))?;
-        
+
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(AgentError::AiApi(format!(
                 "OpenAI API returned error status: {}, body: {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
-        
+
         let response_data: OpenAiCompletionResponse = response
             .json()
             .await
             .map_err(|e| AgentError::AiApi(format!("Failed to parse OpenAI response: {}", e)))?;
-        
+
         if response_data.choices.is_empty() {
-            return Err(AgentError::AiApi("OpenAI API returned no choices".to_string()));
+            return Err(AgentError::AiApi(
+                "OpenAI API returned no choices".to_string(),
+            ));
         }
-        
-        Ok(response_data.choices[0].message.content.clone().unwrap_or_default())
+
+        Ok(response_data.choices[0]
+            .message
+            .content
+            .clone()
+            .unwrap_or_default())
     }
-    
+
     async fn chat_completion_with_functions(
-        &self, 
-        messages: Vec<Message>, 
+        &self,
+        messages: Vec<Message>,
         functions: Value,
 
-        force_message_only: bool, 
+        force_message_only: bool,
     ) -> AgentResult<ChatCompletionResponse> {
-
-
-
         let api_messages: Vec<OpenAiMessage> = messages
             .into_iter()
             .map(|m| OpenAiMessage {
@@ -201,71 +189,54 @@ impl AiClient for OpenAiClient {
             })
             .collect();
 
+        let mut function_tools = Vec::new();
 
-            let mut function_tools = Vec::new();
-
-
-            if let Some(functions_array) = functions.as_array(){
-
-                for func_raw in functions_array {
-
-
-                    if let Ok(func) = serde_json::from_value::<OpenAiCallableFunction>( func_raw.clone() ){
-
-                    function_tools .push(    FunctionTool{
-
-                           r#type: "function".into(),
-                           function: func.clone()
-                        } );
-                   }
+        if let Some(functions_array) = functions.as_array() {
+            for func_raw in functions_array {
+                if let Ok(func) = serde_json::from_value::<OpenAiCallableFunction>(func_raw.clone())
+                {
+                    function_tools.push(FunctionTool {
+                        r#type: "function".into(),
+                        function: func.clone(),
+                    });
                 }
-                    
             }
+        }
 
-           
+        let enable_function_calling = !force_message_only; // for now
 
-           let enable_function_calling = !force_message_only ; // for now 
+        let request_body = match enable_function_calling {
+            true => json!({
 
-           let request_body = match enable_function_calling {
- 
-                    true => json!({
-                          
-                             "model": "gpt-4o" ,
+                 "model": "gpt-4o" ,
 
-                            "messages": api_messages,
-                         //   "temperature": 0.7,  // Lower temperature for more deterministic responses
-                        //    "max_completion_tokens": 8000,  // Ensure enough tokens for multiple tool calls
+                "messages": api_messages,
+             //   "temperature": 0.7,  // Lower temperature for more deterministic responses
+            //    "max_completion_tokens": 8000,  // Ensure enough tokens for multiple tool calls
 
-                            "tools": function_tools,
+                "tools": function_tools,
 
-                            "tool_choice": "required",
-                           // "parallel_tool_calls": true , 
-                            
-                        }),
+                "tool_choice": "required",
+               // "parallel_tool_calls": true ,
 
-                    false => json!({
-                      //  "model": self.model,
+            }),
 
-                        "model": "gpt-4o" ,
+            false => json!({
+              //  "model": self.model,
 
-                        "messages": api_messages,
+                "model": "gpt-4o" ,
 
-                        //"temperature": 0.7,
-                        // "max_tokens": Some(4000),
-                       
-                    
-                    }),
+                "messages": api_messages,
 
+                //"temperature": 0.7,
+                // "max_tokens": Some(4000),
+
+
+            }),
         };
 
+        //println!("request_body {:?}", request_body);
 
-
-            
-            //println!("request_body {:?}", request_body);
-
-
- 
-        
         let response = self
             .client
             .post("https://api.openai.com/v1/chat/completions")
@@ -273,63 +244,54 @@ impl AiClient for OpenAiClient {
             .send()
             .await
             .map_err(|e| AgentError::AiApi(format!("OpenAI API request failed: {}", e)))?;
-        
 
-           println!("response {:?}", response);
-
+        println!("response {:?}", response);
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(AgentError::AiApi(format!(
                 "OpenAI API returned error status: {}, body: {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
-        
+
         let response_data: OpenAiCompletionResponse = response
             .json()
             .await
             .map_err(|e| AgentError::AiApi(format!("Failed to parse OpenAI response: {}", e)))?;
-        
 
-
-           println!("response_data {:?}", response_data);
+        println!("response_data {:?}", response_data);
 
         if response_data.choices.is_empty() {
-            return Err(AgentError::AiApi("OpenAI API returned no choices".to_string()));
+            return Err(AgentError::AiApi(
+                "OpenAI API returned no choices".to_string(),
+            ));
         }
-        
+
         let message = &response_data.choices[0].message;
-        
+
         let result = if let Some(tool_calls) = &message.tool_calls {
-
-
-
             ChatCompletionResponse {
                 content: message.content.clone(),
                 tool_calls: Some(tool_calls.to_vec()),
             }
-
-
-            
         } else {
             ChatCompletionResponse {
                 content: message.content.clone(),
                 tool_calls: None,
             }
         };
-        
+
         Ok(result)
     }
-    
+
     async fn generate_embeddings(&self, text: &str) -> AgentResult<Vec<f32>> {
         let request = OpenAiEmbeddingRequest {
             model: "text-embedding-ada-002".to_string(), // Standard embedding model
             input: text.to_string(),
         };
-        
+
         let response = self
             .client
             .post("https://api.openai.com/v1/embeddings")
@@ -337,51 +299,48 @@ impl AiClient for OpenAiClient {
             .send()
             .await
             .map_err(|e| AgentError::AiApi(format!("OpenAI API request failed: {}", e)))?;
-        
+
         let status = response.status();
         if !status.is_success() {
             let error_text = response.text().await.unwrap_or_default();
             return Err(AgentError::AiApi(format!(
                 "OpenAI API returned error status: {}, body: {}",
-                status,
-                error_text
+                status, error_text
             )));
         }
-        
+
         let response_data: OpenAiEmbeddingResponse = response
             .json()
             .await
             .map_err(|e| AgentError::AiApi(format!("Failed to parse OpenAI response: {}", e)))?;
-        
+
         if response_data.data.is_empty() {
-            return Err(AgentError::AiApi("OpenAI API returned no embeddings".to_string()));
+            return Err(AgentError::AiApi(
+                "OpenAI API returned no embeddings".to_string(),
+            ));
         }
-        
+
         Ok(response_data.data[0].embedding.clone())
     }
-    
+
     fn provider_name(&self) -> String {
         "openai".to_string()
     }
-    
+
     fn model_name(&self) -> String {
         self.model.clone()
     }
-    
+
     fn clone_box(&self) -> Box<dyn AiClient> {
         Box::new(self.clone())
     }
 }
 
-
-#[derive(Serialize,Debug)]
+#[derive(Serialize, Debug)]
 pub struct FunctionTool {
-    
     r#type: String,
-    function: OpenAiCallableFunction 
+    function: OpenAiCallableFunction,
 }
-
-
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OpenAiCallableFunction {

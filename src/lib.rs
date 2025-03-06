@@ -1,3 +1,4 @@
+pub mod agent_engine;
 pub mod ai;
 pub mod cli;
 pub mod codebase;
@@ -6,7 +7,6 @@ pub mod error;
 pub mod memory;
 pub mod task;
 pub mod utils;
-pub mod agent_engine;
 
 pub mod subtasks;
 
@@ -16,4 +16,3 @@ pub use error::{AgentError, AgentResult};
 pub use ai::AiClient;
 pub use cli::run_cli;
 pub use config::Settings;
-  

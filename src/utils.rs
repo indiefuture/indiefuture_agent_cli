@@ -38,22 +38,23 @@ pub fn is_likely_binary(content: &str) -> bool {
     // Count null bytes and non-UTF8 characters as indicators of binary content
     let null_byte_count = content.chars().filter(|&c| c == '\0').count();
     let total_chars = content.len();
-    
+
     // If more than 1% of the content is null bytes, consider it binary
     if total_chars > 0 && (null_byte_count as f64 / total_chars as f64) > 0.01 {
         return true;
     }
-    
+
     // Check for common binary file signatures
     if content.starts_with("\u{1f}\u{8b}") || // gzip
        content.starts_with("PK\u{3}\u{4}") || // zip
        content.starts_with("\u{89}PNG") || // png
        content.starts_with("GIF8") || // gif
-       content.starts_with("\u{ff}\u{d8}\u{ff}") // jpeg
+       content.starts_with("\u{ff}\u{d8}\u{ff}")
+    // jpeg
     {
         return true;
     }
-    
+
     false
 }
 
@@ -64,6 +65,11 @@ pub fn format_duration(seconds: u64) -> String {
     } else if seconds < 3600 {
         format!("{}m {}s", seconds / 60, seconds % 60)
     } else {
-        format!("{}h {}m {}s", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+        format!(
+            "{}h {}m {}s",
+            seconds / 3600,
+            (seconds % 3600) / 60,
+            seconds % 60
+        )
     }
 }

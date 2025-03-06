@@ -1,4 +1,4 @@
-use crate::codebase::parser::{FileInfo, detect_language};
+use crate::codebase::parser::{detect_language, FileInfo};
 use crate::error::{AgentError, AgentResult};
 use crate::utils;
 use ignore::{DirEntry, Walk, WalkBuilder};
@@ -118,8 +118,8 @@ impl CodeScanner {
             .map_err(|e| AgentError::Io(e))?;
 
         let language = detect_language(path);
-        let relative_path = pathdiff::diff_paths(path, &self.root_path)
-            .unwrap_or_else(|| path.to_path_buf());
+        let relative_path =
+            pathdiff::diff_paths(path, &self.root_path).unwrap_or_else(|| path.to_path_buf());
 
         Ok(Some(FileInfo {
             path: relative_path.to_string_lossy().to_string(),
@@ -132,9 +132,7 @@ impl CodeScanner {
     /// Scan a directory for all supported files
     pub async fn scan_directory(&self, path: &Path) -> AgentResult<Vec<FileInfo>> {
         let mut files = Vec::new();
-        let walker = WalkBuilder::new(path)
-            .hidden(false)
-            .build();
+        let walker = WalkBuilder::new(path).hidden(false).build();
 
         for entry in walker {
             let entry = match entry {

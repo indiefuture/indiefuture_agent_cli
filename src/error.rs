@@ -34,10 +34,10 @@ pub enum AgentError {
 
     #[error("Embedding error: {0}")]
     Embedding(String),
-    
+
     #[error("Tool execution error: {0}")]
     ToolExecution(String),
-    
+
     #[error("Working context error: {0}")]
     WorkingContext(String),
 

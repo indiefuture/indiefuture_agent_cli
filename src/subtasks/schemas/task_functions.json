@@ -94,6 +94,13 @@
         "path": {
           "type": "string",
           "description": "The absolute path to the directory to list"
+        },
+        "ignore": {
+          "type": "array",
+          "description": "Optional: List of glob patterns to ignore (e.g. [\"*.tmp\", \"node_modules\"])",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": ["path"]

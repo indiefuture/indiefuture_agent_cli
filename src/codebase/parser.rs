@@ -40,24 +40,24 @@ pub fn detect_language(path: &Path) -> Option<String> {
 /// A more sophisticated version would use actual parsers for each language
 pub fn parse_file(content: &str, language: Option<&str>) -> Vec<CodeStructure> {
     let mut structures = Vec::new();
-    
+
     // Skip parsing if no language is specified
     let language = match language {
         Some(lang) => lang,
         None => return structures,
     };
-    
+
     // Split the content into lines for analysis
     let lines: Vec<&str> = content.lines().collect();
-    
+
     match language {
         "rust" => parse_rust(&lines, &mut structures),
         "typescript" | "javascript" => parse_js_ts(&lines, &mut structures),
         "python" => parse_python(&lines, &mut structures),
         // Add more language parsers as needed
-        _ => {}, // Unsupported language, return empty structures
+        _ => {} // Unsupported language, return empty structures
     }
-    
+
     structures
 }
 
@@ -70,10 +70,10 @@ fn parse_rust(lines: &[&str], structures: &mut Vec<CodeStructure>) {
     let mut impl_name = String::new();
     let mut fn_name = String::new();
     let mut start_line = 0;
-    
+
     for (i, &line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        
+
         // Look for struct definitions
         if trimmed.starts_with("struct ") && trimmed.contains("{") {
             if let Some(name) = extract_name(trimmed, "struct ") {
@@ -92,7 +92,6 @@ fn parse_rust(lines: &[&str], structures: &mut Vec<CodeStructure>) {
             });
             in_struct = false;
         }
-        
         // Look for impl blocks
         else if trimmed.starts_with("impl ") && trimmed.contains("{") {
             if let Some(name) = extract_name(trimmed, "impl ") {
@@ -111,7 +110,6 @@ fn parse_rust(lines: &[&str], structures: &mut Vec<CodeStructure>) {
             });
             in_impl = false;
         }
-        
         // Look for functions
         else if trimmed.starts_with("fn ") && trimmed.contains("(") {
             if let Some(name) = extract_name(trimmed, "fn ") {
@@ -140,13 +138,19 @@ fn parse_js_ts(lines: &[&str], structures: &mut Vec<CodeStructure>) {
     let mut class_name = String::new();
     let mut fn_name = String::new();
     let mut start_line = 0;
-    
+
     for (i, &line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        
+
         // Look for class definitions
-        if (trimmed.starts_with("class ") || trimmed.starts_with("export class ")) && trimmed.contains("{") {
-            let search_term = if trimmed.starts_with("export") { "export class " } else { "class " };
+        if (trimmed.starts_with("class ") || trimmed.starts_with("export class "))
+            && trimmed.contains("{")
+        {
+            let search_term = if trimmed.starts_with("export") {
+                "export class "
+            } else {
+                "class "
+            };
             if let Some(name) = extract_name(trimmed, search_term) {
                 in_class = true;
                 class_name = name;
@@ -163,10 +167,11 @@ fn parse_js_ts(lines: &[&str], structures: &mut Vec<CodeStructure>) {
             });
             in_class = false;
         }
-        
         // Look for functions/methods
-        else if (trimmed.starts_with("function ") || trimmed.starts_with("const ") && trimmed.contains(" = function")) 
-               && trimmed.contains("(") {
+        else if (trimmed.starts_with("function ")
+            || trimmed.starts_with("const ") && trimmed.contains(" = function"))
+            && trimmed.contains("(")
+        {
             if let Some(name) = extract_function_name_js(trimmed) {
                 in_function = true;
                 fn_name = name;
@@ -193,10 +198,10 @@ fn parse_python(lines: &[&str], structures: &mut Vec<CodeStructure>) {
     let mut class_name = String::new();
     let mut fn_name = String::new();
     let mut start_line = 0;
-    
+
     for (i, &line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        
+
         // Look for class definitions
         if trimmed.starts_with("class ") && (trimmed.contains(":") || trimmed.contains("(")) {
             if let Some(name) = extract_name(trimmed, "class ") {
@@ -205,7 +210,6 @@ fn parse_python(lines: &[&str], structures: &mut Vec<CodeStructure>) {
                 start_line = i;
             }
         }
-        
         // Look for function definitions
         else if trimmed.starts_with("def ") && trimmed.contains("(") {
             if let Some(name) = extract_name(trimmed, "def ") {
@@ -214,13 +218,17 @@ fn parse_python(lines: &[&str], structures: &mut Vec<CodeStructure>) {
                 start_line = i;
             }
         }
-        
+
         // For Python, we can't reliably detect ends of blocks by syntax alone
         // A more sophisticated implementation would track indentation levels
         // For the MVP, we'll use a simplistic approach based on empty lines and indentation
-        
+
         let next_line = lines.get(i + 1);
-        if in_class && next_line.map_or(true, |line| !line.starts_with(" ") && !line.starts_with("\t") && !line.is_empty()) {
+        if in_class
+            && next_line.map_or(true, |line| {
+                !line.starts_with(" ") && !line.starts_with("\t") && !line.is_empty()
+            })
+        {
             structures.push(CodeStructure {
                 kind: "class".to_string(),
                 name: class_name.clone(),
@@ -229,8 +237,12 @@ fn parse_python(lines: &[&str], structures: &mut Vec<CodeStructure>) {
             });
             in_class = false;
         }
-        
-        if in_function && next_line.map_or(true, |line| !line.starts_with(" ") && !line.starts_with("\t") && !line.is_empty()) {
+
+        if in_function
+            && next_line.map_or(true, |line| {
+                !line.starts_with(" ") && !line.starts_with("\t") && !line.is_empty()
+            })
+        {
             structures.push(CodeStructure {
                 kind: "function".to_string(),
                 name: fn_name.clone(),
@@ -245,8 +257,9 @@ fn parse_python(lines: &[&str], structures: &mut Vec<CodeStructure>) {
 /// Helper function to extract a name from a definition line
 fn extract_name(line: &str, prefix: &str) -> Option<String> {
     let after_prefix = line.trim_start_matches(prefix);
-    let name_end = after_prefix.find(|c: char| c == ' ' || c == '{' || c == '(' || c == ':' || c == '<');
-    
+    let name_end =
+        after_prefix.find(|c: char| c == ' ' || c == '{' || c == '(' || c == ':' || c == '<');
+
     if let Some(end) = name_end {
         Some(after_prefix[0..end].to_string())
     } else {
@@ -259,14 +272,14 @@ fn extract_function_name_js(line: &str) -> Option<String> {
     if line.starts_with("function ") {
         return extract_name(line, "function ");
     }
-    
+
     // Handle arrow functions and function expressions
     if let Some(equals_pos) = line.find(" = ") {
         let before_equals = &line[0..equals_pos];
         let const_pos = before_equals.find("const ");
         let let_pos = before_equals.find("let ");
         let var_pos = before_equals.find("var ");
-        
+
         let start_pos = const_pos.or(let_pos).or(var_pos);
         if let Some(_pos) = start_pos {
             let declaration_keyword = if const_pos.is_some() {
@@ -276,19 +289,19 @@ fn extract_function_name_js(line: &str) -> Option<String> {
             } else {
                 "var "
             };
-            
+
             return extract_name(before_equals, declaration_keyword);
         }
     }
-    
+
     None
 }
 
 /// Represents a code structure like a class, function, etc.
 #[derive(Debug, Clone)]
 pub struct CodeStructure {
-    pub kind: String,    // "class", "function", "struct", etc.
-    pub name: String,    // Name of the structure
+    pub kind: String,      // "class", "function", "struct", etc.
+    pub name: String,      // Name of the structure
     pub line_start: usize, // Starting line number
     pub line_end: usize,   // Ending line number
 }
@@ -299,20 +312,20 @@ pub fn summarize_file(file_info: &FileInfo) -> String {
         Some(lang) => parse_file(&file_info.content, Some(lang)),
         None => Vec::new(),
     };
-    
+
     if structures.is_empty() {
         return format!("File: {}\nNo parseable structures found.", file_info.path);
     }
-    
+
     let mut summary = format!("File: {}\n", file_info.path);
     summary.push_str("Structures:\n");
-    
+
     for structure in structures {
         summary.push_str(&format!(
             "- {} '{}' (lines {}-{})\n",
             structure.kind, structure.name, structure.line_start, structure.line_end
         ));
     }
-    
+
     summary
 }

@@ -3,8 +3,8 @@ pub mod openai;
 //pub mod prompt;
 
 use crate::ai::openai::GptToolCall;
-use async_trait::async_trait;
 use crate::error::AgentResult;
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -35,7 +35,8 @@ pub struct Message {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FunctionCall { //not used ? 
+pub struct FunctionCall {
+    //not used ?
     pub name: String,
     pub arguments: String,
 }
@@ -43,49 +44,47 @@ pub struct FunctionCall { //not used ?
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionResponse {
     pub content: Option<String>,
-    pub tool_calls: Option< Vec<GptToolCall> >,
+    pub tool_calls: Option<Vec<GptToolCall>>,
 }
-
-
-
-
-
-
 
 #[async_trait]
 pub trait AiClient: Send + Sync {
     /// Generate text from a conversation history
     async fn generate_text(&self, messages: Vec<Message>) -> AgentResult<String>;
-    
+
     /// Generate chat completion with functions
     async fn chat_completion_with_functions(
-        &self, 
-        messages: Vec<Message>, 
+        &self,
+        messages: Vec<Message>,
         functions: serde_json::Value,
-         force_message_only: bool 
+        force_message_only: bool,
     ) -> AgentResult<ChatCompletionResponse> {
         // Default implementation to support backward compatibility
         // Derived implementations should override this
         Err(crate::error::AgentError::AiApi(
-            "Function calling not implemented for this AI provider".to_string()
+            "Function calling not implemented for this AI provider".to_string(),
         ))
     }
-    
+
     /// Generate embeddings for a text
     async fn generate_embeddings(&self, text: &str) -> AgentResult<Vec<f32>>;
-    
+
     /// Get the name of the AI provider
     fn provider_name(&self) -> String;
-    
+
     /// Get the model name being used
     fn model_name(&self) -> String;
-    
+
     /// Create a clone of this client
     fn clone_box(&self) -> Box<dyn AiClient>;
 }
 
 /// Factory function to create an AI client based on configuration
-pub fn create_ai_client(provider: &str, model: &str, api_key: &str) -> AgentResult<Box<dyn AiClient>> {
+pub fn create_ai_client(
+    provider: &str,
+    model: &str,
+    api_key: &str,
+) -> AgentResult<Box<dyn AiClient>> {
     match provider {
         "openai" => {
             let client = openai::OpenAiClient::new(api_key, model)?;

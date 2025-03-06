@@ -1,6 +1,8 @@
 
 
  
+use crate::memory::ContextMemory;
+use tokio::sync::Mutex;
 use log::info;
 use cliclack::log as cliclack_log;
 use cliclack::input;
@@ -19,7 +21,7 @@ use crate::agent_engine::SubtaskOutput;
 
 #[ async_trait ] 
 pub trait SubtaskTool {
-	  async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput > ; 
+	  async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>>  ) -> Option<SubtaskOutput > ; 
 }
 
 /// Types of operations the agent can perform
@@ -94,7 +96,7 @@ impl SubTask {
  
 #[async_trait] 
 impl SubtaskTool for TaskTool {
-    async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput> {
+    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput> {
         let input = &self.0;
 
         let system_prompt = r#"
@@ -398,7 +400,7 @@ impl SubtaskTool for ReadTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput >  { 
+		async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 
@@ -430,7 +432,7 @@ impl SubtaskTool for BashTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput > { 
+		async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput > { 
 
 
 
@@ -457,7 +459,7 @@ impl SubtaskTool for UpdateTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput >  { 
+		async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 
@@ -484,7 +486,7 @@ impl SubtaskTool for SearchTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput >  { 
+		async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 

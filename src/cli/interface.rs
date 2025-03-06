@@ -1,5 +1,6 @@
+use crate::memory::ContextMemory;
 use crate::agent_engine::SharedState;
-use crate::agent_engine::ContextMemory;
+ 
 use tokio::sync::Mutex;
 use cliclack::{self, intro, outro, select, input};
 use console::style;
@@ -17,7 +18,7 @@ use std::sync::Arc;
 pub async fn run_cli(
 
         shared_state: Arc<SharedState>, 
-        context_memory: Arc< ContextMemory  >,
+        context_memory: Arc< Mutex<ContextMemory > >,
 
     settings: Arc<Settings>, 
 

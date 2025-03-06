@@ -1,3 +1,6 @@
+use crate::memory::ContextMemory;
+use crate::memory::MemoryFragment;
+use tokio::sync::Mutex;
 use cliclack::{self, spinner, confirm, log};
  
 use crate::SubTask;
@@ -20,8 +23,6 @@ pub struct AgentEngine {
 }
 
 
-#[derive(Default)]
-pub struct ContextMemory {} 
 
 
 pub struct SubtaskSlot { depth: usize, subtask:  SubTaskType } 
@@ -40,6 +41,22 @@ impl AgentEngine {
 			}
 
 		 ); 
+	}
+
+
+	pub fn increment_subtask_depth(&mut self) {
+
+		self.current_subtask_depth +=1 ; 
+
+		println!("increment_subtask_depth {}", self.current_subtask_depth);
+	}
+
+	pub fn set_subtask_depth(&mut self, new_depth: usize) {
+
+		self.current_subtask_depth  = new_depth; 
+
+		println!("set task depth {}", new_depth);
+
 	}
 
   /*  pub fn set_user_confirmation_callback(
@@ -71,26 +88,15 @@ impl AgentEngine {
     }
      
 
-    pub async fn perform_subtask(&self, subtask_type: SubTaskType, settings: Arc<Settings>) -> SubtaskOutput {
+    pub async fn perform_subtask(&self, subtask_type: SubTaskType, context_memory: Arc<Mutex<ContextMemory>> , shared_state:Arc<SharedState>, settings: Arc<Settings>) -> SubtaskOutput {
         // Get the appropriate tool for this subtask type
         let tool = subtask_type.get_tool();
         
-        // Create AI client as needed
-        let api_key = settings.claude_api_key.as_ref()
-            .cloned()
-            .unwrap_or_else(|| "dummy_key".to_string());
-        let model = &settings.default_model;
+        let ai_client =   &shared_state.ai_client  ; 
         
-        let ai_client = match crate::ai::claude::ClaudeClient::new(&api_key, model) {
-            Ok(client) => Arc::new(client) as Arc<dyn AiClient>,
-            Err(_) => {
-                // Return early if we can't create a client
-                return SubtaskOutput::SubtaskComplete();
-            }
-        };
         
         // Execute the subtask
-        match tool.handle_subtask(ai_client).await {
+        match tool.handle_subtask(ai_client , context_memory ).await {
             Some(output) => output,
             None => SubtaskOutput::SubtaskComplete()
         }
@@ -105,8 +111,8 @@ impl AgentEngine {
 	pub async fn handle_subtasks( 
 		&mut self, 
 
-		_shared_state: Arc<SharedState>, 
-		_context_memory: Arc< ContextMemory  >,
+		 shared_state: Arc<SharedState>, 
+		 context_memory: Arc< Mutex<ContextMemory>  >,
 		settings: Arc<Settings> 
 
 		){
@@ -121,8 +127,12 @@ impl AgentEngine {
 
 
 
-			if let Some( _next_subtask)  = self.active_subtasks.last () {
+			if let Some(  next_subtask)  = self.active_subtasks.last () {
 
+				if next_subtask.depth != self.current_subtask_depth {
+					self.set_subtask_depth( next_subtask.depth);
+
+				}
 
 			}
 
@@ -141,8 +151,52 @@ impl AgentEngine {
 
 					    let spin = spinner();
     					spin.start("Processing task...");
-					  let subtask_output =  self.perform_subtask(  next_subtask.subtask , Arc::clone( &settings )  ).await; 
+
+
+					  let subtask_output =  self.perform_subtask(  
+					    	next_subtask.subtask ,
+					    	Arc::clone( &context_memory ),
+					  	    Arc::clone( &shared_state ), 
+					  	    Arc::clone( &settings ) 
+					   ).await; 
+
+
 					   spin.stop("Task analyzed ✓");
+
+
+
+					   match subtask_output {
+
+						   	SubtaskOutput::AddToContextMemory( ref memory_fragment ) => {
+
+
+						   		 context_memory.lock().await .add_frag( memory_fragment.clone() );
+
+						   	}
+
+						   	SubtaskOutput::PushSubtasksIncrementDepth( ref new_tasks_array  ) => {
+						   		for new_subtask in new_tasks_array {
+
+						   		     	//increment depth here !?
+
+						   		     self.increment_subtask_depth(   );
+						   			 self.push_subtask(  new_subtask.clone()  ); 
+
+						   		}
+						   		 
+
+
+						   	} 
+
+						   	_ => {  
+						   			// ??? 
+						   		}
+
+
+
+					   }
+
+
 
 					   	  cliclack::log::info(format!(" {:?}" , subtask_output ) ).expect("Failed to log");
 
@@ -174,6 +228,9 @@ impl AgentEngine {
 #[derive(Debug)]
 pub enum SubtaskOutput {
 	PushSubtasksIncrementDepth(Vec<SubTaskType>),  // add subtasks in a deeper depth to try and grow context -- once those are all popped off and handled, we have more context to try again !  
+		
+	AddToContextMemory( MemoryFragment  ),
+
 	SubtaskComplete(),  //we have enough context to do an AI Query or to move on  
 	//SubtaskFailed, // we are giving up . when would this happen ? 
 }

@@ -1,5 +1,5 @@
 use crate::ai::{Message, MessageRole};
-use crate::memory::MemoryEntry;
+ 
 use crate::subtasks::OperationType;
 use serde_json::{json, Value};
 
@@ -31,7 +31,7 @@ impl PromptBuilder {
     }
 
     /// Add context from memory entries
-    pub fn add_memory_context(&mut self, memories: &[MemoryEntry], token_limit: Option<usize>) -> &mut Self {
+ /*   pub fn add_memory_context(&mut self, memories: &[MemoryEntry], token_limit: Option<usize>) -> &mut Self {
         if let Some(limit) = token_limit {
             self.max_context_tokens = limit;
         }
@@ -51,7 +51,7 @@ impl PromptBuilder {
         }
         
         self
-    }
+    }*/
     
     /// Add a single block of context
     pub fn add_context(&mut self, content: &str, source: &str, relevance_score: f32) -> &mut Self {

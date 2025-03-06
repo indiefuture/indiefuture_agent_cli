@@ -1,4 +1,4 @@
-# INDIEFUTURE BOT
+# Indiefuture Agent CLI 
 
 An AI-powered CLI agent that can listen for commands, break them down into subtasks, and execute them with context from your local codebase.
 
@@ -14,8 +14,7 @@ An AI-powered CLI agent that can listen for commands, break them down into subta
 
 ## Requirements
 
-- Rust 1.70+
-- Qdrant (optional, for vector storage)
+- Rust 1.80+ 
 
 ## Installation
 
@@ -40,17 +39,15 @@ OPENAI_API_KEY=your_openai_api_key
 CLAUDE_API_KEY=your_claude_api_key
 DEFAULT_AI_PROVIDER=openai
 DEFAULT_MODEL=gpt-4o
-QDRANT_URL=http://localhost:6333
+ 
 ```
 
 ## Usage
 
 ```bash
 # Start the interactive CLI
-cargo run --release
-
-# Or execute a task directly from the command line
-cargo run --release -- task "Your task description here"
+cargo run  
+ 
 ```
 
 ## Example Tasks
@@ -59,17 +56,7 @@ cargo run --release -- task "Your task description here"
 - "Find all TODO comments and create GitHub issues for them"
 - "Refactor the error handling in the src/utils directory"
 - "Write unit tests for the Parser class"
-
-## Architecture
-
-This project follows the architecture defined in the [design_spec.md](design_spec.md) file, which includes:
-
-1. Command Interface Layer
-2. Task Management Layer
-3. Memory Management Layer
-4. AI Communication Layer
-5. Code Analysis Layer
-
+ 
 ## License
 
 MIT

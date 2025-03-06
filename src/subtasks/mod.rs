@@ -1,3 +1,4 @@
+use crate::ai::openai::GptToolCall;
 use crate::memory::ContextMemory;
 use tokio::sync::Mutex;
  
@@ -45,6 +46,208 @@ pub enum SubTaskType {
     Bash(String),
 }
 
+
+
+
+
+
+
+
+
+
+
+impl SubTaskType {
+
+
+
+
+
+    pub fn from_tool_call( tool_call: GptToolCall ) -> Option<Self> {
+
+
+
+
+          let function_name = tool_call.function.name.as_str();
+          let args :serde_json::Value  = serde_json::from_str(  tool_call.function.arguments.as_str()? ).unwrap_or_default();
+
+
+       /*  let args: serde_json::Value = match &tool_call.function.arguments.as_array() {
+            Some(args) => args,
+            None  => {
+                         println!("WARN no function match  ");
+                    return None
+                },
+        };*/
+            
+        // Log that we got a function call
+        let _ = cliclack::log::info(format!("Processing function: {} {:?}", function_name, args  ) );
+            
+        // Create the appropriate subtask based on the function call
+        let subtask = match function_name {
+            "create_task" => {
+                // Extract description parameter
+                let description = match args["description"].as_str() {
+                    Some(desc) => desc.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+             
+                let _ = cliclack::log::info(format!("Adding task: {}", description) );
+                
+                SubTaskType::Task(description) 
+            },
+            
+            "read_file_at_path" => {
+                // Extract file_path parameter
+                let file_path = match args["file_path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                let _ = cliclack::log::info(format!("Adding read file subtask: {}", file_path));
+                
+                 SubTaskType::Read(FilePathOrQuery::FilePath(file_path)) 
+            },
+            
+            "read_file_from_lookup" => {
+                // Extract lookup_query parameter
+                let lookup_query = match args["lookup_query"].as_str() {
+                    Some(query) => query.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                let _ = cliclack::log::info(format!("Adding read lookup subtask: {}", lookup_query));
+                
+                 SubTaskType::Read(FilePathOrQuery::FileQuery(lookup_query)) 
+            },
+            
+            "update_file_at_path" => {
+                // Extract file_path parameter
+                let file_path = match args["file_path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                let _ = cliclack::log::info(format!("Adding update file subtask: {}", file_path));
+                
+                 SubTaskType::Update(FilePathOrQuery::FilePath(file_path)) 
+            },
+            
+            "update_file_from_lookup" => {
+                // Extract lookup_query parameter
+                let lookup_query = match args["lookup_query"].as_str() {
+                    Some(query) => query.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                let _ = cliclack::log::info(format!("Adding update lookup subtask: {}", lookup_query));
+                
+                SubTaskType::Update(FilePathOrQuery::FileQuery(lookup_query))
+            },
+            
+            "search_for_file" => {
+                // Extract query parameter
+                let query = match args["query"].as_str() {
+                    Some(q) => q.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                let _ = cliclack::log::info(format!("Adding search subtask: {}", query));
+                
+                 SubTaskType::Search(query)
+            },
+            
+            "create_bash" => {
+                // Extract command parameter
+                let command = match args["command"].as_str() {
+                    Some(cmd) => cmd.to_string(),
+                    None => return None,
+                };
+                
+                // Log it
+                let _ = cliclack::log::info(format!("Adding bash subtask: {}", command));
+                
+                 SubTaskType::Bash(command) 
+            },
+            
+            // Support legacy function names for backward compatibility
+            "create_read" => {
+                let description = match args["description"].as_str() {
+                    Some(desc) => desc.to_string(),
+                    None => return None,
+                };
+                
+                if description.starts_with('/') || description.starts_with("./") {
+                    let _ = cliclack::log::info(format!("Adding legacy read file subtask: {}", description));
+                    SubTaskType::Read(FilePathOrQuery::FilePath(description)) 
+                } else {
+                    let _ = cliclack::log::info(format!("Adding legacy read lookup subtask: {}", description));
+                     SubTaskType::Read(FilePathOrQuery::FileQuery(description)) 
+                }
+            },
+            
+            "create_update" => {
+                let description = match args["description"].as_str() {
+                    Some(desc) => desc.to_string(),
+                    None => return None,
+                };
+                
+                let _ = cliclack::log::info(format!("Adding legacy update subtask: {}", description));
+                
+                if description.starts_with('/') || description.starts_with("./") {
+                    SubTaskType::Update(FilePathOrQuery::FilePath(description))
+                } else {
+                     SubTaskType::Update(FilePathOrQuery::FileQuery(description))
+                }
+            },
+            
+            "create_search" => {
+                let description = match args["description"].as_str() {
+                    Some(desc) => desc.to_string(),
+                    None => return None,
+                };
+                
+                let _ = cliclack::log::info(format!("Adding legacy search subtask: {}", description));
+                
+                 SubTaskType::Search(description) 
+            },
+            
+            _ => return  None ,
+        };
+        
+        // Extract the SubTaskType from the SubTask
+       // let subtask_type = subtask.task_type;
+
+
+        return Some( subtask ) 
+
+
+
+
+
+
+
+
+    }
+
+
+
+
+
+}
+
+
+
+
+
+
+
 #[derive(Debug, Clone)]
 pub enum FilePathOrQuery {
     FilePath(String),
@@ -89,6 +292,19 @@ impl SubTask {
     pub fn new(task_type: SubTaskType, metadata: Option<serde_json::Value>) -> Self {
         Self { task_type, metadata }
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
 }
 
 
@@ -242,167 +458,39 @@ You must select the most appropriate operations to complete a user's request.
         }
         
         // Process function calls if any
-        let Some(function_call) = response.function_call else {
+        let Some(tool_calls) = response.tool_calls else {
 
             println!("WARN no fn call chosen ");
             return None;
         };
 
-        let function_name = function_call.name.as_str();
-        let args: serde_json::Value = match serde_json::from_str(&function_call.arguments) {
-            Ok(args) => args,
-            Err(_) => {
-                         println!("WARN no function match  ");
-                    return None
-                },
-        };
-            
-        // Log that we got a function call
-        let _ = cliclack::log::info(format!("Processing function: {}", function_name ) );
-            
-        // Create the appropriate subtask based on the function call
-        let subtask = match function_name {
-            "create_task" => {
-                // Extract description parameter
-                let description = match args["description"].as_str() {
-                    Some(desc) => desc.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-             
-                let _ = cliclack::log::info(format!("Adding task: {}", description) );
-                
-                SubTask::new(SubTaskType::Task(description), None)
-            },
-            
-            "read_file_at_path" => {
-                // Extract file_path parameter
-                let file_path = match args["file_path"].as_str() {
-                    Some(path) => path.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding read file subtask: {}", file_path));
-                
-                SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(file_path)), None)
-            },
-            
-            "read_file_from_lookup" => {
-                // Extract lookup_query parameter
-                let lookup_query = match args["lookup_query"].as_str() {
-                    Some(query) => query.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding read lookup subtask: {}", lookup_query));
-                
-                SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(lookup_query)), None)
-            },
-            
-            "update_file_at_path" => {
-                // Extract file_path parameter
-                let file_path = match args["file_path"].as_str() {
-                    Some(path) => path.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding update file subtask: {}", file_path));
-                
-                SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(file_path)), None)
-            },
-            
-            "update_file_from_lookup" => {
-                // Extract lookup_query parameter
-                let lookup_query = match args["lookup_query"].as_str() {
-                    Some(query) => query.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding update lookup subtask: {}", lookup_query));
-                
-                SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(lookup_query)), None)
-            },
-            
-            "search_for_file" => {
-                // Extract query parameter
-                let query = match args["query"].as_str() {
-                    Some(q) => q.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding search subtask: {}", query));
-                
-                SubTask::new(SubTaskType::Search(query), None)
-            },
-            
-            "create_bash" => {
-                // Extract command parameter
-                let command = match args["command"].as_str() {
-                    Some(cmd) => cmd.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding bash subtask: {}", command));
-                
-                SubTask::new(SubTaskType::Bash(command), None)
-            },
-            
-            // Support legacy function names for backward compatibility
-            "create_read" => {
-                let description = match args["description"].as_str() {
-                    Some(desc) => desc.to_string(),
-                    None => return None,
-                };
-                
-                if description.starts_with('/') || description.starts_with("./") {
-                    let _ = cliclack::log::info(format!("Adding legacy read file subtask: {}", description));
-                    SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(description)), None)
-                } else {
-                    let _ = cliclack::log::info(format!("Adding legacy read lookup subtask: {}", description));
-                    SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(description)), None)
-                }
-            },
-            
-            "create_update" => {
-                let description = match args["description"].as_str() {
-                    Some(desc) => desc.to_string(),
-                    None => return None,
-                };
-                
-                let _ = cliclack::log::info(format!("Adding legacy update subtask: {}", description));
-                
-                if description.starts_with('/') || description.starts_with("./") {
-                    SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(description)), None)
-                } else {
-                    SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(description)), None)
-                }
-            },
-            
-            "create_search" => {
-                let description = match args["description"].as_str() {
-                    Some(desc) => desc.to_string(),
-                    None => return None,
-                };
-                
-                let _ = cliclack::log::info(format!("Adding legacy search subtask: {}", description));
-                
-                SubTask::new(SubTaskType::Search(description), None)
-            },
-            
-            _ => return  None ,
-        };
-        
-        // Extract the SubTaskType from the SubTask
-        let subtask_type = subtask.task_type;
 
-        Some(SubtaskOutput::PushSubtasksIncrementDepth(vec![subtask_type]))
+
+        let mut built_sub_tasks = Vec::new();
+
+
+        for tool_call in &tool_calls {
+
+            println!("got tool call {:?}", tool_call);
+
+
+            if let Some( sub_task_type ) = SubTaskType::from_tool_call(tool_call.clone()){
+
+                built_sub_tasks.push(sub_task_type);
+
+            } 
+
+        }
+
+
+        if tool_calls.is_empty(){
+            println!("wARN no tool calls ! ");
+            return None 
+        }
+
+        
+
+        Some(SubtaskOutput::PushSubtasksIncrementDepth(  built_sub_tasks  ))
     }
 }
 

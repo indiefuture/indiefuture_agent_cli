@@ -2,6 +2,7 @@ pub mod claude;
 pub mod openai;
 pub mod prompt;
 
+use crate::ai::openai::GptToolCall;
 use async_trait::async_trait;
 use crate::error::AgentResult;
 use serde::{Deserialize, Serialize};
@@ -32,7 +33,7 @@ pub struct Message {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FunctionCall {
+pub struct FunctionCall { //not used ? 
     pub name: String,
     pub arguments: String,
 }
@@ -40,8 +41,14 @@ pub struct FunctionCall {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatCompletionResponse {
     pub content: Option<String>,
-    pub function_call: Option<FunctionCall>,
+    pub tool_calls: Option< Vec<GptToolCall> >,
 }
+
+
+
+
+
+
 
 #[async_trait]
 pub trait AiClient: Send + Sync {

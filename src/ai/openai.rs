@@ -309,10 +309,7 @@ impl AiClient for OpenAiClient {
 
             ChatCompletionResponse {
                 content: message.content.clone(),
-                function_call: Some(FunctionCall {
-                    name: function_call.name.clone(),
-                    arguments: function_call.arguments.clone(),
-                }),
+                tool_calls: Some(tool_calls.to_vec()),
             }
 
 
@@ -320,7 +317,7 @@ impl AiClient for OpenAiClient {
         } else {
             ChatCompletionResponse {
                 content: message.content.clone(),
-                function_call: None,
+                tool_calls: None,
             }
         };
         

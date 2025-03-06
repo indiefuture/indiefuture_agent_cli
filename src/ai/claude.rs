@@ -277,10 +277,9 @@ impl AiClient for ClaudeClient {
                 
                 return Ok(ChatCompletionResponse {
                     content: Some(content),
-                    function_call: Some(FunctionCall {
-                        name: tool_call.name.clone(),
-                        arguments,
-                    }),
+
+                    tool_calls : None  // FOR NOW !! FIX !! !!!!!!!!!!
+                    
                 });
             }
         }
@@ -288,7 +287,7 @@ impl AiClient for ClaudeClient {
         // No tool calls, just return the content
         Ok(ChatCompletionResponse {
             content: Some(content),
-            function_call: None,
+            tool_calls: None,
         })
     }
     

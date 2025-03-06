@@ -15,7 +15,7 @@ use crate::memory::{MemoryManager, ShortTermMemory, VectorStore};
 use crate::task::{
     SubTask, SubTaskType,    
     // Legacy imports
-    OperationType, Task,  TaskExecutor, TaskStatus
+      Task,  TaskExecutor, TaskStatus
 };
 
 /// Execute a CLI command

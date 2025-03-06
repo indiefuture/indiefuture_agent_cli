@@ -36,12 +36,13 @@ pub enum SubTaskType {
 
     FileReadTool(FileReadToolInputs),
 
-     FileEditTool(FileEditToolInputs),
+    FileEditTool(FileEditToolInputs),
 
-      LSTool(LSToolInputs),
-     GlobTool(GlobToolInputs),
+    LSTool(LSToolInputs),
+    GlobTool(GlobToolInputs),
     GrepTool(GrepToolInputs),
-
+    
+    ExplainTool(String), // Takes a string query to explain using accumulated context
 }
 
 
@@ -49,26 +50,21 @@ pub enum SubTaskType {
 impl SubTaskType {
     pub fn get_tool(&self) -> Arc<dyn SubtaskTool> {
         match self {
-            Self::Task(query)  =>  Arc::new(TaskTool (query.to_string()) ),
+            Self::Task(query) => Arc::new(TaskTool(query.to_string())),
 
-             Self::FileReadTool( input  )  =>  Arc::new(FileReadTool (  input .clone() )),
+            Self::FileReadTool(input) => Arc::new(FileReadTool(input.clone())),
 
-             Self::FileEditTool( input ) => Arc::new( FileEditTool( input.clone() ) ),
+            Self::FileEditTool(input) => Arc::new(FileEditTool(input.clone())),
 
-             Self::Bash( input ) => Arc::new( BashTool( input.to_string()  ) ),
+            Self::Bash(input) => Arc::new(BashTool(input.to_string())),
 
-         
-             Self::LSTool( input)  => Arc::new(  LSTool ( input.clone()  )   ),
+            Self::LSTool(input) => Arc::new(LSTool(input.clone())),
 
-              Self::GlobTool( input)  => Arc::new(  GlobTool ( input.clone()  )   ),
-            Self::GrepTool( input)  => Arc::new(  GrepTool ( input.clone()  )   ) ,
+            Self::GlobTool(input) => Arc::new(GlobTool { inputs: input.clone() }),
             
-         
-            // Other cases should return their respective tool implementations
-
-
-
-        //    _ => unimplemented!("Tool not implemented"),
+            Self::GrepTool(input) => Arc::new(GrepTool(input.clone())),
+            
+            Self::ExplainTool(query) => Arc::new(ExplainTool(query.to_string())),
         }
     }
 }
@@ -79,185 +75,278 @@ impl SubTaskType {
 
 
 
-
 impl SubTaskType {
 
 
 
 
-
-    pub fn from_tool_call( tool_call: GptToolCall ) -> Option<Self> {
-
-
-
-
-          let function_name = tool_call.function.name.as_str();
-          let args :serde_json::Value  = serde_json::from_str(  tool_call.function.arguments.as_str()? ).unwrap_or_default();
-
-
-       /*  let args: serde_json::Value = match &tool_call.function.arguments.as_array() {
-            Some(args) => args,
-            None  => {
-                         println!("WARN no function match  ");
-                    return None
-                },
-        };*/
+    pub fn from_tool_call(tool_call: GptToolCall) -> Option<Self> {
+        let function_name = tool_call.function.name.as_str();
+        let args: serde_json::Value = serde_json::from_str(tool_call.function.arguments.as_str()?).unwrap_or_default();
             
         // Log that we got a function call
-        let _ = cliclack::log::info(format!("Processing function: {} {:?}", function_name, args  ) );
+        let _ = cliclack::log::info(format!("Processing function: {} {:?}", function_name, args));
             
         // Create the appropriate subtask based on the function call
         let subtask = match function_name {
-            "create_task" => {
-                // Extract description parameter
+            "Task" => {
                 let description = match args["description"].as_str() {
                     Some(desc) => desc.to_string(),
                     None => return None,
                 };
                 
-                // Log it
-             
-                let _ = cliclack::log::info(format!("Adding task: {}", description) );
-                
+                let _ = cliclack::log::info(format!("Adding task: {}", description));
                 SubTaskType::Task(description) 
             },
             
-            "read_file_at_path" => {
-                // Extract file_path parameter
-                let file_path = match args["file_path"].as_str() {
-                    Some(path) => path.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding read file subtask: {}", file_path));
-                
-                 SubTaskType::Read(FilePathOrQuery::FilePath(file_path)) 
-            },
-            
-            "read_file_from_lookup" => {
-                // Extract lookup_query parameter
-                let lookup_query = match args["lookup_query"].as_str() {
-                    Some(query) => query.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding read lookup subtask: {}", lookup_query));
-                
-                 SubTaskType::Read(FilePathOrQuery::FileQuery(lookup_query)) 
-            },
-            
-            "update_file_at_path" => {
-                // Extract file_path parameter
-                let file_path = match args["file_path"].as_str() {
-                    Some(path) => path.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding update file subtask: {}", file_path));
-                
-                 SubTaskType::Update(FilePathOrQuery::FilePath(file_path)) 
-            },
-            
-            "update_file_from_lookup" => {
-                // Extract lookup_query parameter
-                let lookup_query = match args["lookup_query"].as_str() {
-                    Some(query) => query.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding update lookup subtask: {}", lookup_query));
-                
-                SubTaskType::Update(FilePathOrQuery::FileQuery(lookup_query))
-            },
-            
-            "search_for_file" => {
-                // Extract query parameter
-                let query = match args["query"].as_str() {
-                    Some(q) => q.to_string(),
-                    None => return None,
-                };
-                
-                // Log it
-                let _ = cliclack::log::info(format!("Adding search subtask: {}", query));
-                
-                 SubTaskType::Search(query)
-            },
-            
-            "create_bash" => {
-                // Extract command parameter
+            "Bash" => {
                 let command = match args["command"].as_str() {
                     Some(cmd) => cmd.to_string(),
                     None => return None,
                 };
                 
-                // Log it
                 let _ = cliclack::log::info(format!("Adding bash subtask: {}", command));
+                SubTaskType::Bash(command) 
+            },
+            
+            "FileReadTool" => {
+                let file_path = match args["file_path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
                 
-                 SubTaskType::Bash(command) 
+                let limit = args["limit"].as_u64().map(|v| v as u32);
+                let offset = args["offset"].as_u64().map(|v| v as u32);
+                
+                let _ = cliclack::log::info(format!("Adding file read subtask: {}", file_path));
+                
+                SubTaskType::FileReadTool(FileReadToolInputs {
+                    file_path,
+                    limit,
+                    offset
+                })
+            },
+            
+            "FileEditTool" => {
+                let file_path = match args["file_path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
+                
+                let old_string = match args["old_string"].as_str() {
+                    Some(s) => s.to_string(),
+                    None => return None,
+                };
+                
+                let new_string = match args["new_string"].as_str() {
+                    Some(s) => s.to_string(),
+                    None => return None,
+                };
+                
+                let _ = cliclack::log::info(format!("Adding file edit subtask: {}", file_path));
+                
+                SubTaskType::FileEditTool(FileEditToolInputs {
+                    file_path,
+                    old_string,
+                    new_string
+                })
+            },
+            
+            "LSTool" => {
+                let file_path = match args["path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
+                
+                let _ = cliclack::log::info(format!("Adding LS subtask: {}", file_path));
+                
+                SubTaskType::LSTool(LSToolInputs {
+                    file_path
+                })
+            },
+            
+            "GlobTool" => {
+                let pattern = match args["pattern"].as_str() {
+                    Some(p) => p.to_string(),
+                    None => return None,
+                };
+                
+                let path = args["path"].as_str().map(|s| s.to_string());
+                
+                let _ = cliclack::log::info(format!("Adding glob search subtask: {}", pattern));
+                
+                SubTaskType::GlobTool(GlobToolInputs {
+                    pattern,
+                    path
+                })
+            },
+            
+            "GrepTool" => {
+                let pattern = match args["pattern"].as_str() {
+                    Some(p) => p.to_string(),
+                    None => return None,
+                };
+                
+                let include = args["include"].as_str().map(|s| s.to_string());
+                let path = args["path"].as_str().map(|s| s.to_string());
+                
+                let _ = cliclack::log::info(format!("Adding grep search subtask: {}", pattern));
+                
+                SubTaskType::GrepTool(GrepToolInputs {
+                    pattern,
+                    include,
+                    path
+                })
+            },
+            
+            "ExplainTool" => {
+                let query = match args["query"].as_str() {
+                    Some(q) => q.to_string(),
+                    None => return None,
+                };
+                
+                let _ = cliclack::log::info(format!("Adding explain subtask: {}", query));
+                
+                SubTaskType::ExplainTool(query)
             },
             
             // Support legacy function names for backward compatibility
-            "create_read" => {
+            "create_task" => {
                 let description = match args["description"].as_str() {
                     Some(desc) => desc.to_string(),
                     None => return None,
                 };
                 
-                if description.starts_with('/') || description.starts_with("./") {
-                    let _ = cliclack::log::info(format!("Adding legacy read file subtask: {}", description));
-                    SubTaskType::Read(FilePathOrQuery::FilePath(description)) 
+                let _ = cliclack::log::info(format!("Legacy function: create_task -> Task: {}", description));
+                SubTaskType::Task(description) 
+            },
+            
+            "create_bash" => {
+                let command = match args["command"].as_str() {
+                    Some(cmd) => cmd.to_string(),
+                    None => return None,
+                };
+                
+                let _ = cliclack::log::info(format!("Legacy function: create_bash -> Bash: {}", command));
+                SubTaskType::Bash(command) 
+            },
+            
+            "View" | "ReadFile" | "read_file_at_path" => {
+                let file_path = match args["file_path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
+                
+                let limit = args["limit"].as_u64().map(|v| v as u32);
+                let offset = args["offset"].as_u64().map(|v| v as u32);
+                
+                let _ = cliclack::log::info(format!("Legacy function: {} -> FileReadTool: {}", function_name, file_path));
+                
+                SubTaskType::FileReadTool(FileReadToolInputs {
+                    file_path,
+                    limit,
+                    offset
+                })
+            },
+            
+            "Edit" => {
+                let file_path = match args["file_path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
+                
+                let old_string = match args["old_string"].as_str() {
+                    Some(s) => s.to_string(),
+                    None => return None,
+                };
+                
+                let new_string = match args["new_string"].as_str() {
+                    Some(s) => s.to_string(),
+                    None => return None,
+                };
+                
+                let _ = cliclack::log::info(format!("Legacy function: Edit -> FileEditTool: {}", file_path));
+                
+                SubTaskType::FileEditTool(FileEditToolInputs {
+                    file_path,
+                    old_string,
+                    new_string
+                })
+            },
+            
+            "LS" => {
+                let file_path = match args["path"].as_str() {
+                    Some(path) => path.to_string(),
+                    None => return None,
+                };
+                
+                let _ = cliclack::log::info(format!("Legacy function: LS -> LSTool: {}", file_path));
+                
+                SubTaskType::LSTool(LSToolInputs {
+                    file_path
+                })
+            },
+            
+            // Additional legacy mappings
+            "read_file_from_lookup" | "create_read" => {
+                let file_path = if function_name == "read_file_from_lookup" {
+                    match args["lookup_query"].as_str() {
+                        Some(query) => query.to_string(),
+                        None => return None,
+                    }
                 } else {
-                    let _ = cliclack::log::info(format!("Adding legacy read lookup subtask: {}", description));
-                     SubTaskType::Read(FilePathOrQuery::FileQuery(description)) 
-                }
-            },
-            
-            "create_update" => {
-                let description = match args["description"].as_str() {
-                    Some(desc) => desc.to_string(),
-                    None => return None,
+                    // create_read
+                    match args["description"].as_str() {
+                        Some(desc) => desc.to_string(),
+                        None => return None,
+                    }
                 };
                 
-                let _ = cliclack::log::info(format!("Adding legacy update subtask: {}", description));
+                let _ = cliclack::log::info(format!("Legacy function: {} -> FileReadTool: {}", function_name, file_path));
                 
-                if description.starts_with('/') || description.starts_with("./") {
-                    SubTaskType::Update(FilePathOrQuery::FilePath(description))
+                SubTaskType::FileReadTool(FileReadToolInputs {
+                    file_path,
+                    limit: None,
+                    offset: None
+                })
+            },
+            
+            "update_file_at_path" | "update_file_from_lookup" | "create_update" => {
+                // Legacy update functions - cannot be directly converted
+                let _ = cliclack::log::info(format!("Legacy update function cannot be converted: {}", function_name));
+                return None;
+            },
+            
+            "search_for_file" | "create_search" => {
+                let pattern = if function_name == "search_for_file" {
+                    match args["query"].as_str() {
+                        Some(q) => q.to_string(),
+                        None => return None,
+                    }
                 } else {
-                     SubTaskType::Update(FilePathOrQuery::FileQuery(description))
-                }
-            },
-            
-            "create_search" => {
-                let description = match args["description"].as_str() {
-                    Some(desc) => desc.to_string(),
-                    None => return None,
+                    // create_search
+                    match args["description"].as_str() {
+                        Some(desc) => desc.to_string(),
+                        None => return None,
+                    }
                 };
                 
-                let _ = cliclack::log::info(format!("Adding legacy search subtask: {}", description));
+                let _ = cliclack::log::info(format!("Legacy function: {} -> GrepTool: {}", function_name, pattern));
                 
-                 SubTaskType::Search(description) 
+                SubTaskType::GrepTool(GrepToolInputs {
+                    pattern,
+                    include: None,
+                    path: None
+                })
             },
             
-            _ => return  None ,
+            _ => {
+                let _ = cliclack::log::info(format!("Unknown function: {}", function_name));
+                return None;
+            },
         };
         
-        // Extract the SubTaskType from the SubTask
-       // let subtask_type = subtask.task_type;
-
-
-        return Some( subtask ) 
-
-
-
-
-
-
-
-
+        return Some(subtask);
     }
 
 
@@ -265,8 +354,6 @@ impl SubTaskType {
 
 
 }
-
-
 
 
 
@@ -282,16 +369,26 @@ impl SubTaskType {
     pub fn description(&self) -> String {
         match self {
             SubTaskType::Task(desc) => format!("Task: {}", desc),
-             
             SubTaskType::Bash(cmd) => format!("Execute: {}", cmd),
+            SubTaskType::FileReadTool(inputs) => format!("Read File: {}", inputs.file_path),
+            SubTaskType::FileEditTool(inputs) => format!("Edit File: {}", inputs.file_path),
+            SubTaskType::LSTool(inputs) => format!("List Directory: {}", inputs.file_path),
+            SubTaskType::GlobTool(inputs) => format!("Glob Search: {}", inputs.pattern),
+            SubTaskType::GrepTool(inputs) => format!("Grep Search: {}", inputs.pattern),
+            SubTaskType::ExplainTool(query) => format!("Explain: {}", query),
         }
     }
     
     pub fn icon(&self) -> &'static str {
         match self {
             SubTaskType::Task(_) => "🧠",
-           
             SubTaskType::Bash(_) => "🖥️",
+            SubTaskType::FileReadTool(_) => "📄",
+            SubTaskType::FileEditTool(_) => "✏️",
+            SubTaskType::LSTool(_) => "📁",
+            SubTaskType::GlobTool(_) => "🔍",
+            SubTaskType::GrepTool(_) => "🔎",
+            SubTaskType::ExplainTool(_) => "💡",
         }
     }
 
@@ -328,9 +425,6 @@ impl SubTask {
 
 
 
-
-
-
 }
 
 
@@ -338,117 +432,44 @@ impl SubTask {
  
 #[async_trait] 
 impl SubtaskTool for TaskTool {
-    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput> {
+    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient>, _context_memory: Arc<Mutex<ContextMemory>>) -> Option<SubtaskOutput> {
         let input = &self.0;
 
         let system_prompt = r#"
-You are an expert AI assistant for a command-line tool that can help with various tasks.
+You are an expert AI assistant for a command-line tool that helps with software development tasks.
 Your job is to analyze user requests and determine what operations to perform.
-Provide a list of the most appropriate operations to complete the input request, in the order in which they should be performed.
+
+IMPORTANT: You MUST recommend multiple tools (at least 2-3) to complete the task in a step-by-step fashion. 
+Break down complex tasks into a sequence of simpler operations using different tools in the optimal order.
+
+SUGGESTED WORKFLOW PATTERN:
+1. Use search tools (GlobTool, GrepTool) to find relevant files
+2. Use FileReadTool to examine the contents of those files
+3. Use ExplainTool as a final step to provide an explanation using all the gathered context
+
+For example, if asked to "explain the logging system in this codebase", you should recommend:
+1. First use GlobTool to find all source files
+2. Then use GrepTool to search for "log" or "logger" patterns in those files
+3. Use FileReadTool to examine the most relevant files in detail
+4. Finally use ExplainTool to provide a comprehensive explanation based on all gathered information
+
+Available tools:
+1. GlobTool - For finding files matching patterns (e.g., "**/*.rs")
+2. GrepTool - For searching content in files (e.g., finding text patterns)
+3. FileReadTool - For reading file contents
+4. LSTool - For listing directory contents 
+5. Bash - For executing bash commands (use for running tests, builds, etc.)
+6. FileEditTool - For editing files (making code changes)
+7. ExplainTool - For providing explanations based on all gathered context (use as the final step)
+8. Task - For general AI assistance (use only when other tools won't work)
+
+Remember to ALWAYS conclude with ExplainTool to provide a comprehensive answer based on all gathered information.
 "#;
 
-        // Define the SubTaskType function schema for OpenAI function calling
-        let functions = json!([
-            {
-                "name": "create_task",
-                "description": "Create a new task based on user input",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "description": {
-                            "type": "string",
-                            "description": "Description of the task to be performed"
-                        }
-                    },
-                    "required": ["description"]
-                }
-            },
-            {
-                "name": "read_file_at_path",
-                "description": "Create a subtask to read a specific file by path",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "file_path": {
-                            "type": "string",
-                            "description": "Full path to the file to read"
-                        }
-                    },
-                    "required": ["file_path"]
-                }
-            },
-            {
-                "name": "read_file_from_lookup",
-                "description": "Create a subtask to find and read a file matching a description",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "lookup_query": {
-                            "type": "string",
-                            "description": "Description of the file to find and read"
-                        }
-                    },
-                    "required": ["lookup_query"]
-                }
-            },
-            {
-                "name": "update_file_at_path",
-                "description": "Create a subtask to update a specific file by path",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "file_path": {
-                            "type": "string",
-                            "description": "Full path to the file to update"
-                        }
-                    },
-                    "required": ["file_path"]
-                }
-            },
-            {
-                "name": "update_file_from_lookup",
-                "description": "Create a subtask to find and update a file matching a description",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "lookup_query": {
-                            "type": "string",
-                            "description": "Description of the file to find and update"
-                        }
-                    },
-                    "required": ["lookup_query"]
-                }
-            },
-            {
-                "name": "search_for_file",
-                "description": "Create a subtask to search for content in files",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Content to search for in files"
-                        }
-                    },
-                    "required": ["query"]
-                }
-            },
-             
-            {
-                "name": "create_bash",
-                "description": "Create a subtask to execute a bash command",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "command": {
-                            "type": "string",
-                            "description": "The bash command to execute"
-                        }
-                    },
-                    "required": ["command"]
-                }
-            }
-        ]);
+        // Load function schema from JSON file
+        let functions_json = include_str!("schemas/task_functions.json");
+        let functions: serde_json::Value = serde_json::from_str(functions_json)
+            .expect("Failed to parse task_functions.json");
 
         // Create messages for the AI
         let messages = vec![
@@ -469,54 +490,40 @@ Provide a list of the most appropriate operations to complete the input request,
             .chat_completion_with_functions(messages, functions)
             .await {
                 Ok(resp) => resp,
-                Err( e ) => {
-                         println!("WARN no  chat_completion_with_functions {:?}", e );
-                    return None
+                Err(e) => {
+                    println!("WARN: Failed to get chat completion: {:?}", e);
+                    return None;
                 },  
             };
         
-
+        // Display AI response text if any
         if let Some(content) = response.content {
-
-             println!("{}",   content );
-
-
+            println!("{}", content);
         }
         
-        // Process function calls if any
+        // Process function calls
         let Some(tool_calls) = response.tool_calls else {
-
-            println!("WARN no fn call chosen ");
+            println!("WARN: No tool calls chosen by AI");
             return None;
         };
 
+        if tool_calls.is_empty() {
+            println!("WARN: Empty tool calls list");
+            return None;
+        }
 
-
+        // Convert tool calls to subtasks
         let mut built_sub_tasks = Vec::new();
-
-
         for tool_call in &tool_calls {
+            println!("Processing tool call: {:?}", tool_call);
 
-            println!("got tool call {:?}", tool_call);
-
-
-            if let Some( sub_task_type ) = SubTaskType::from_tool_call(tool_call.clone()){
-
+            if let Some(sub_task_type) = SubTaskType::from_tool_call(tool_call.clone()) {
                 built_sub_tasks.push(sub_task_type);
-
-            } 
-
+            }
         }
 
-
-        if tool_calls.is_empty(){
-            println!("wARN no tool calls ! ");
-            return None 
-        }
-
-        
-            //this pushes the new subtasks onto the queue 
-        Some(SubtaskOutput::PushSubtasksIncrementDepth(  built_sub_tasks  ))
+        // Push subtasks to the queue
+        Some(SubtaskOutput::PushSubtasksIncrementDepth(built_sub_tasks))
     }
 }
 
@@ -532,7 +539,7 @@ pub struct BashTool(String);  //query
  
 #[ async_trait ] 
 impl SubtaskTool for BashTool {
-    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput > { 
+    async fn handle_subtask(&self, _ai_client: &Box<dyn AiClient>, _context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput > { 
         let command = &self.0;
 
         // Execute Bash command
@@ -598,10 +605,9 @@ impl SubtaskTool for BashTool {
 
 
 
-
 #[derive(Serialize,Deserialize,Clone,Debug)]
 pub struct LSToolInputs  {
-   file_path: String, 
+   pub file_path: String, 
 }
 pub struct LSTool( LSToolInputs ) ;
 
@@ -610,10 +616,7 @@ pub struct LSTool( LSToolInputs ) ;
 
 #[ async_trait ] 
 impl SubtaskTool for LSTool {
-
-   
-    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
-
+    async fn handle_subtask(&self, _ai_client: &Box<dyn AiClient>, _context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 
@@ -637,10 +640,13 @@ impl SubtaskTool for LSTool {
 
 #[derive(Serialize,Deserialize,Clone,Debug)]
 pub struct GlobToolInputs  {
-   file_path: String, 
+   pub pattern: String,
+   pub path: Option<String>
 }
 
-pub struct GlobTool( GlobToolInputs );
+pub struct GlobTool {
+    pub inputs: GlobToolInputs
+}
 
 
 
@@ -648,20 +654,157 @@ pub struct GlobTool( GlobToolInputs );
 
 #[ async_trait ] 
 impl SubtaskTool for GlobTool {
-
-   
-    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
-
-
-
-
-
-            None
-
-
-     }
-
-
+    async fn handle_subtask(&self, _ai_client: &Box<dyn AiClient>, context_memory: Arc<Mutex<ContextMemory>>) -> Option<SubtaskOutput> { 
+        use crate::memory::{MemoryFragment, MemoryMetadata};
+        use chrono::Utc;
+        use glob::glob;
+        use std::path::PathBuf;
+        use std::fs;
+        
+        // Get the pattern and base path
+        let pattern = &self.inputs.pattern;
+        let base_path = match &self.inputs.path {
+            Some(path) => PathBuf::from(path),
+            None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        };
+        
+        // Construct the full pattern with the base path
+        let search_pattern = if base_path.to_string_lossy().ends_with('/') {
+            format!("{}{}", base_path.display(), pattern)
+        } else {
+            format!("{}/{}", base_path.display(), pattern)
+        };
+        
+        // Log the search
+        println!("🔍 Searching for files with pattern: {}", search_pattern);
+        
+        // Collect results and detailed path information
+        let mut results = Vec::new();
+        let mut detailed_results = Vec::new();
+        
+        // Use the glob crate to perform the pattern matching
+        match glob(&search_pattern) {
+            Ok(paths) => {
+                for entry in paths {
+                    match entry {
+                        Ok(path) => {
+                            // Get additional file metadata when possible
+                            let metadata = fs::metadata(&path).ok();
+                            let is_dir = metadata.as_ref().map_or(false, |m| m.is_dir());
+                            let size = metadata.as_ref().map_or(0, |m| m.len());
+                            let path_str = path.to_string_lossy().to_string();
+                            
+                            // Format path with type indicator for display
+                            let type_indicator = if is_dir { "📁" } else { "📄" };
+                            let size_str = if !is_dir { format!(" ({} bytes)", size) } else { String::new() };
+                            let formatted_path = format!("{} {}{}", type_indicator, path_str, size_str);
+                            
+                            results.push(formatted_path);
+                            
+                            // Add detailed information for memory
+                            detailed_results.push((
+                                path_str.clone(),
+                                if is_dir { "directory".to_string() } else { "file".to_string() },
+                                size
+                            ));
+                        },
+                        Err(e) => {
+                            println!("⚠️ Error: {:?}", e);
+                        }
+                    }
+                }
+            },
+            Err(e) => {
+                println!("⚠️ Invalid glob pattern: {:?}", e);
+                return None;
+            }
+        }
+        
+        // Sort results (directories first, then files)
+        let mut sorted_indexes = (0..results.len()).collect::<Vec<_>>();
+        sorted_indexes.sort_by(|&a, &b| {
+            let a_is_dir = results[a].starts_with("📁");
+            let b_is_dir = results[b].starts_with("📁");
+            
+            if a_is_dir && !b_is_dir {
+                std::cmp::Ordering::Less
+            } else if !a_is_dir && b_is_dir {
+                std::cmp::Ordering::Greater
+            } else {
+                results[a].cmp(&results[b])
+            }
+        });
+        
+        // Reorder both results based on the sorted indexes
+        let sorted_results: Vec<String> = sorted_indexes.iter().map(|&i| results[i].clone()).collect();
+        let sorted_detailed: Vec<(String, String, u64)> = sorted_indexes.iter().map(|&i| detailed_results[i].clone()).collect();
+        
+        // Format the output for display
+        let output = if sorted_results.is_empty() {
+            "No files found matching the pattern.".to_string()
+        } else {
+            format!("Found {} file(s):\n{}", sorted_results.len(), sorted_results.join("\n"))
+        };
+        
+        // Log the results
+        println!("{}", output);
+        
+        // Create a memory fragment from the results
+        let memory_fragment = if !sorted_detailed.is_empty() {
+            // Format metadata for memory
+            let mut mem_content = format!("Results for glob pattern: {}\n\n", search_pattern);
+            
+            for (path, file_type, size) in &sorted_detailed {
+                if file_type == "directory" {
+                    mem_content.push_str(&format!("- Directory: {}\n", path));
+                } else {
+                    mem_content.push_str(&format!("- File: {} ({} bytes)\n", path, size));
+                }
+            }
+            
+            // Create memory metadata
+            let memory_metadata = MemoryMetadata {
+                file_type: Some("search_results".to_string()),
+                path: Some(base_path.to_string_lossy().to_string()),
+                timestamp: Some(Utc::now().timestamp()),
+                tags: vec![
+                    "glob_search".to_string(),
+                    format!("pattern:{}", pattern)
+                ],
+            };
+            
+            MemoryFragment {
+                source: "glob_search".to_string(),
+                content: mem_content,
+                metadata: Some(memory_metadata),
+            }
+        } else {
+            // Create a memory fragment for empty results
+            MemoryFragment {
+                source: "glob_search".to_string(),
+                content: format!("No files found matching glob pattern: {}", search_pattern),
+                metadata: Some(MemoryMetadata {
+                    file_type: Some("search_results".to_string()),
+                    path: Some(base_path.to_string_lossy().to_string()),
+                    timestamp: Some(Utc::now().timestamp()),
+                    tags: vec![
+                        "glob_search".to_string(),
+                        format!("pattern:{}", pattern),
+                        "empty_results".to_string()
+                    ],
+                }),
+            }
+        };
+        
+        // Add the memory fragment to context memory
+        {
+            let mut memory = context_memory.lock().await;
+            memory.add_frag(memory_fragment.clone());
+        }
+        
+        // Return the memory fragment as output
+        Some(SubtaskOutput::AddToContextMemory(memory_fragment))
+    }
 }
 
 
@@ -675,7 +818,9 @@ impl SubtaskTool for GlobTool {
 
 #[derive(Serialize,Deserialize,Clone,Debug)]
 pub struct GrepToolInputs  {
-   file_path: String, 
+   pub pattern: String,
+   pub include: Option<String>,
+   pub path: Option<String>
 }
 
 pub struct GrepTool( GrepToolInputs ); 
@@ -687,11 +832,7 @@ pub struct GrepTool( GrepToolInputs );
 
 #[ async_trait ] 
 impl SubtaskTool for GrepTool {
-
- 
-
-
-    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
+    async fn handle_subtask(&self, _ai_client: &Box<dyn AiClient>, _context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 
@@ -704,7 +845,6 @@ impl SubtaskTool for GrepTool {
 
 
 }
-
 
 
 
@@ -716,7 +856,9 @@ impl SubtaskTool for GrepTool {
 
 #[derive(Serialize,Deserialize,Clone,Debug)]
 pub struct FileReadToolInputs  {
-   file_path: String, 
+   pub file_path: String,
+   pub limit: Option<u32>,
+   pub offset: Option<u32>
 }
 
 
@@ -725,11 +867,7 @@ pub struct FileReadTool( FileReadToolInputs );  //query
  
 #[ async_trait ] 
 impl SubtaskTool for FileReadTool {
-
- 
-
-
-    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
+    async fn handle_subtask(&self, _ai_client: &Box<dyn AiClient>, _context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 
@@ -745,10 +883,11 @@ impl SubtaskTool for FileReadTool {
 
 
 
-
 #[derive(Serialize,Deserialize, Clone , Debug )]
 pub struct FileEditToolInputs  {
-   file_path: String, 
+   pub file_path: String,
+   pub old_string: String,
+   pub new_string: String
 }
 
 
@@ -756,11 +895,7 @@ pub struct FileEditTool( FileEditToolInputs );
  
 #[ async_trait ] 
 impl SubtaskTool for FileEditTool {
-
- 
-
-
-	async fn handle_subtask(&self, ai_client: &Box<dyn AiClient> , context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
+	async fn handle_subtask(&self, _ai_client: &Box<dyn AiClient>, _context_memory: Arc<Mutex<ContextMemory>> ) -> Option<SubtaskOutput >  { 
 
 
 
@@ -779,7 +914,104 @@ impl SubtaskTool for FileEditTool {
  
 
 // --------------
- 
- 
 
+pub struct ExplainTool(String);  // Query string
 
+#[async_trait]
+impl SubtaskTool for ExplainTool {
+    async fn handle_subtask(&self, ai_client: &Box<dyn AiClient>, context_memory: Arc<Mutex<ContextMemory>>) -> Option<SubtaskOutput> {
+        use colored::Colorize;
+        use std::time::Instant;
+        
+        // Get the query to explain
+        let query = &self.0;
+        
+        println!("\n{} {}\n", "💡".bold(), "Generating explanation based on context...".cyan().bold());
+        
+        // Create a system prompt that instructs the AI to use the context
+        let system_prompt = r#"
+You are an expert AI assistant explaining a software codebase with context.
+Use the provided context to thoroughly answer the user's question.
+Focus only on the information present in the context and the specific query.
+If the context doesn't contain relevant information, acknowledge the limitations 
+of what you can explain based on the available context.
+
+Format your response clearly using markdown when appropriate:
+- Use bullet points for lists
+- Use code blocks for code examples or file paths
+- Use headings to organize longer responses
+"#;
+
+        // Collect all context data from memory fragments
+        let context_data = {
+            let memory = context_memory.lock().await;
+            let fragments = memory.get_fragments();
+            
+            if fragments.is_empty() {
+                "No context information has been collected yet.".to_string()
+            } else {
+                // Format all fragments as context
+                let mut context_str = format!("Local {} relevant context of information:\n\n", fragments.len());
+                
+                for (i, fragment) in fragments.iter().enumerate() {
+                    context_str.push_str(&format!("=== CONTEXT ITEM {} (from {}) ===\n", i+1, fragment.source));
+                    context_str.push_str(&fragment.content);
+                    context_str.push_str("\n\n");
+                    
+                    // Add metadata if present
+                    if let Some(meta) = &fragment.metadata {
+                        if let Some(path) = &meta.path {
+                            context_str.push_str(&format!("Path: {}\n", path));
+                        }
+                        if !meta.tags.is_empty() {
+                            context_str.push_str(&format!("Tags: {}\n", meta.tags.join(", ")));
+                        }
+                        context_str.push_str("\n");
+                    }
+                }
+                
+                context_str
+            }
+        };
+        
+        // Build messages with context and query
+        let messages = vec![
+            crate::ai::Message {
+                role: crate::ai::MessageRole::System,
+                content: system_prompt.to_string(),
+                name: None,
+            },
+            crate::ai::Message {
+                role: crate::ai::MessageRole::User,
+                content: format!("Here is the context information I've gathered:\n\n{}\n\nBased on this context, please explain: {}", context_data, query),
+                name: None,
+            },
+        ];
+        
+        // Start timer for measuring explanation generation time
+        let start_time = Instant::now();
+        
+        // Generate explanation using the AI client
+        let explanation = match ai_client.generate_text(messages).await {
+            Ok(text) => text,
+            Err(e) => {
+                println!("{} {}: {}", "❌".red().bold(), "Error generating explanation".red().bold(), e);
+                return Some(SubtaskOutput::SubtaskComplete());
+            }
+        };
+        
+        // Calculate and format elapsed time
+        let elapsed = start_time.elapsed();
+        let elapsed_secs = elapsed.as_secs_f32();
+        let timing_msg = format!("Generated in {:.2}s", elapsed_secs);
+        
+        // Print the generated explanation
+        println!("\n{}\n", "=".repeat(80).cyan());
+        println!("{}\n", explanation);
+        println!("{}\n", "=".repeat(80).cyan());
+        println!("{}\n", timing_msg.dimmed());
+        
+        // Return complete signal
+        Some(SubtaskOutput::SubtaskComplete())
+    }
+}

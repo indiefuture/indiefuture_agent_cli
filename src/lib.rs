@@ -16,5 +16,4 @@ pub use error::{AgentError, AgentResult};
 pub use ai::AiClient;
 pub use cli::run_cli;
 pub use config::Settings;
- 
-pub use subtasks::{SubTask, SubTaskType};
+  

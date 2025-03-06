@@ -1,0 +1,142 @@
+[
+  {
+    "name": "ExplainTool",
+    "description": "Provides an explanation using all the accumulated context from previous tools. Use this as the final step after gathering information with other tools like GlobTool, GrepTool, and FileReadTool.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "The specific question or topic to explain based on the gathered context"
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  {
+    "name": "Task",
+    "description": "Create a task for general AI assistance, analysis, or processing. Use only for high-level analysis or information that can't be obtained through other specialized tools.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string",
+          "description": "The task description or query for the AI to process"
+        }
+      },
+      "required": ["description"]
+    }
+  },
+  {
+    "name": "Bash",
+    "description": "Execute a bash command on the system",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "The bash command to execute"
+        }
+      },
+      "required": ["command"]
+    }
+  },
+  {
+    "name": "FileReadTool",
+    "description": "Read the contents of a file. Often follows GlobTool or GrepTool to examine specific files discovered during a search.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "The absolute path to the file to read"
+        },
+        "limit": {
+          "type": "number",
+          "description": "Optional: The maximum number of lines to read"
+        },
+        "offset": {
+          "type": "number",
+          "description": "Optional: The line number to start reading from (0-based)"
+        }
+      },
+      "required": ["file_path"]
+    }
+  },
+  {
+    "name": "FileEditTool",
+    "description": "Edit the contents of a file by replacing text",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "The absolute path to the file to edit"
+        },
+        "old_string": {
+          "type": "string",
+          "description": "The text to replace. Must be exact including whitespace"
+        },
+        "new_string": {
+          "type": "string",
+          "description": "The new text to insert in place of old_string"
+        }
+      },
+      "required": ["file_path", "old_string", "new_string"]
+    }
+  },
+  {
+    "name": "LSTool",
+    "description": "List files and directories at a specified path",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "The absolute path to the directory to list"
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "GlobTool",
+    "description": "Find files matching a glob pattern. Typically used as a first step before more specific operations (like reading files or searching within them).",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "The glob pattern to match (e.g., '**/*.rs', 'src/**/*.json', '**/*.{js,ts}')"
+        },
+        "path": {
+          "type": "string", 
+          "description": "Optional: The directory to search in"
+        }
+      },
+      "required": ["pattern"]
+    }
+  },
+  {
+    "name": "GrepTool",
+    "description": "Search for content in files using regular expressions. Works well after using GlobTool to narrow down which files to search within.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "The regex pattern to search for in file contents (e.g., 'function\\s+main', 'import\\s+React')"
+        },
+        "include": {
+          "type": "string",
+          "description": "Optional: File pattern to include (e.g., '*.rs', '*.{ts,tsx}')"
+        },
+        "path": {
+          "type": "string",
+          "description": "Optional: The directory to search in"
+        }
+      },
+      "required": ["pattern"]
+    }
+  }
+]

@@ -13,7 +13,7 @@ pub struct OpenAiClient {
     api_key: String,
     model: String,
 }
-
+/*
 #[derive(Debug, Serialize)]
 struct OpenAiCompletionRequest {
     model: String,
@@ -24,7 +24,7 @@ struct OpenAiCompletionRequest {
     functions: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     function_call: Option<Value>,
-}
+}*/
 
 #[derive(Debug, Serialize)]
 struct OpenAiMessage {
@@ -133,20 +133,29 @@ impl AiClient for OpenAiClient {
                 name: m.name,
             })
             .collect();
-        
-        let request = OpenAiCompletionRequest {
-            model: self.model.clone(),
-            messages: api_messages,
-            temperature: 0.7,
-            max_tokens: Some(4000),
-            functions: None,
-            function_call: None,
-        };
+            
+
+
+           
+
+           let request_body = json!({
+                        "model": self.model,
+                        "messages": api_messages,
+
+                        //"temperature": 0.7,
+                        // "max_tokens": Some(4000),
+                       
+                    
+                    });
+
+
+
+ 
         
         let response = self
             .client
             .post("https://api.openai.com/v1/chat/completions")
-            .json(&request)
+            .json(& request_body )
             .send()
             .await
             .map_err(|e| AgentError::AiApi(format!("OpenAI API request failed: {}", e)))?;
@@ -225,12 +234,12 @@ impl AiClient for OpenAiClient {
                              "model": "gpt-4o" ,
 
                             "messages": api_messages,
-                          //   "temperature": 0.7,
-                          //  "max_tokens": Some(4000),
+                            "temperature": 0.2,  // Lower temperature for more deterministic responses
+                            "max_tokens": 4000,  // Ensure enough tokens for multiple tool calls
 
                             "tools": function_tools,
-                            "tool_choice": "required"  // or 'automatic'
-                        
+                            "tool_choice": "required",  // Allow multiple tool calls
+                            "parallel_tool_calls" : true
                         }),
 
                     false => json!({

@@ -1,6 +1,6 @@
 pub mod claude;
 pub mod openai;
-pub mod prompt;
+//pub mod prompt;
 
 use crate::ai::openai::GptToolCall;
 use async_trait::async_trait;

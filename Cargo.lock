@@ -510,6 +510,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "colored"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
+dependencies = [
+ "lazy_static",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "console"
 version = "0.15.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2257,6 +2267,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "cliclack",
+ "colored",
  "console",
  "ctrlc",
  "degen-sql",
@@ -2266,6 +2277,7 @@ dependencies = [
  "env_logger",
  "ethers",
  "futures",
+ "glob",
  "ignore",
  "indicatif",
  "log",

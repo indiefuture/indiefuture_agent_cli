@@ -1,5 +1,6 @@
 use crate::memory::ContextMemory;
 use crate::agent_engine::SharedState;
+use crate::subtasks::SubTaskType;
  
 use tokio::sync::Mutex;
 use cliclack::{self, intro, outro, select, input};
@@ -17,8 +18,8 @@ use std::sync::Arc;
 /// Main CLI entry point
 pub async fn run_cli(
 
-        shared_state: Arc<SharedState>, 
-        context_memory: Arc< Mutex<ContextMemory > >,
+    shared_state: Arc<SharedState>, 
+    context_memory: Arc< Mutex<ContextMemory > >,
 
     settings: Arc<Settings>, 
 
@@ -34,7 +35,7 @@ pub async fn run_cli(
     loop {
         let select_result = select("What would you like to do?")
             .item("task", "Execute a task", "Break down and execute a complex task")
-            .item("scan", "Scan codebase", "Scan and index your codebase for future tasks")
+           // .item("scan", "Scan codebase", "Scan and index your codebase for future tasks")
             .item("config", "Configure", "View or modify settings")
             .item("quit", "Quit", "Exit the application")
             .interact();
@@ -58,15 +59,14 @@ pub async fn run_cli(
                 if !task_description.is_empty() {
 
                     agent_engine.lock().await.push_subtask(
-                          crate::SubTaskType::Task( task_description.clone() )
-
+                          SubTaskType::Task(task_description.clone())
                         );
                    // execute_command("task", &task_description, settings.clone()).await?;
                 }
             }
-            "scan" => {
+           // "scan" => {
                 //execute_command("scan", "", settings.clone()).await?;
-            }
+            //}
             "config" => {
                // execute_command("config", "", settings.clone()).await?;
             }

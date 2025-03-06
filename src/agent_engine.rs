@@ -1,13 +1,15 @@
+use crate::subtasks::subtask::SubTask;
+use crate::subtasks::subtask::SubTaskType;
 use crate::memory::ContextMemory;
 use crate::memory::MemoryFragment;
 use tokio::sync::Mutex;
 use cliclack::{self, spinner, confirm, log};
  
-use crate::SubTask;
+ 
 use crate::AiClient;
 use std::env::args;
 use std::sync::Arc;
-use crate::{Settings, SubTaskType};
+use crate::{Settings,  };
 
 #[derive(Default)] 
 pub struct AgentEngine {

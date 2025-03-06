@@ -1,6 +1,6 @@
 use crate::ai::{Message, MessageRole};
 use crate::memory::MemoryEntry;
-use crate::task::OperationType;
+use crate::subtasks::OperationType;
 use serde_json::{json, Value};
 
 /// Builds a prompt with relevant context for the AI

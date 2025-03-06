@@ -17,4 +17,4 @@ pub use ai::AiClient;
 pub use cli::run_cli;
 pub use config::Settings;
 pub use memory::{MemoryManager, WorkingContext};
-pub use task::{SubTask, SubTaskType, SubTaskExecutor   };
+pub use subtasks::{SubTask, SubTaskType};

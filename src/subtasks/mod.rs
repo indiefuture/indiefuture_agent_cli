@@ -1,7 +1,8 @@
 
 
  
-use cliclack::log::info;
+use log::info;
+use cliclack::log as cliclack_log;
 use cliclack::input;
 use crate::ai::MessageRole;
 use crate::AiClient;
@@ -18,11 +19,74 @@ use crate::agent_engine::SubtaskOutput;
 
 #[ async_trait ] 
 pub trait SubtaskTool {
+	  async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput > ; 
+}
 
+/// Types of operations the agent can perform
+#[derive(Debug, Clone, PartialEq)]
+pub enum OperationType {
+    SEARCH,
+    READ,
+    UPDATE,
+    BASH,
+    TASK,
+    UNKNOWN
+}
 
-	  async fn handle_subtask(&self, ai_client: Arc<AiClient>) -> Option<SubtaskOutput > ; 
+/// Represents the type of subtask to perform
+#[derive(Debug, Clone)]
+pub enum SubTaskType {
+    Task(String),
+    Search(String),
+    Read(FilePathOrQuery),
+    Update(FilePathOrQuery),
+    Bash(String),
+}
 
+#[derive(Debug, Clone)]
+pub enum FilePathOrQuery {
+    FilePath(String),
+    FileQuery(String),
+}
 
+impl SubTaskType {
+    pub fn description(&self) -> String {
+        match self {
+            SubTaskType::Task(desc) => format!("Task: {}", desc),
+            SubTaskType::Search(query) => format!("Search files: {}", query),
+            SubTaskType::Read(path_or_query) => match path_or_query {
+                FilePathOrQuery::FilePath(path) => format!("Read file: {}", path),
+                FilePathOrQuery::FileQuery(query) => format!("Find and read: {}", query),
+            },
+            SubTaskType::Update(path_or_query) => match path_or_query {
+                FilePathOrQuery::FilePath(path) => format!("Update file: {}", path),
+                FilePathOrQuery::FileQuery(query) => format!("Find and update: {}", query),
+            },
+            SubTaskType::Bash(cmd) => format!("Execute: {}", cmd),
+        }
+    }
+    
+    pub fn icon(&self) -> &'static str {
+        match self {
+            SubTaskType::Task(_) => "🧠",
+            SubTaskType::Search(_) => "🔍",
+            SubTaskType::Read(_) => "📖",
+            SubTaskType::Update(_) => "✏️",
+            SubTaskType::Bash(_) => "🖥️",
+        }
+    }
+}
+
+/// Represents a subtask to be executed
+pub struct SubTask {
+    pub task_type: SubTaskType,
+    pub metadata: Option<serde_json::Value>,
+}
+
+impl SubTask {
+    pub fn new(task_type: SubTaskType, metadata: Option<serde_json::Value>) -> Self {
+        Self { task_type, metadata }
+    }
 }
 
 
@@ -36,7 +100,7 @@ impl SubtaskTool for TaskTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: Arc<AiClient>) -> Option<SubtaskOutput>  { 
+		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput>  { 
 
 
 
@@ -188,7 +252,7 @@ You must select the most appropriate operations to complete a user's request.
                 .to_string();
             
             // Log that we got a function call
-            log::info(&format!("Processing function: {}", function_name)).expect("Failed to log");
+            info!("Processing function: {}", function_name).expect("Failed to log");
             
             // Create the appropriate subtask based on the function call
             let subtask = match function_name {
@@ -199,7 +263,7 @@ You must select the most appropriate operations to complete a user's request.
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding task: {}", description)).expect("Failed to log");
+                    info!("Adding task: {}", description).expect("Failed to log");
                     
                     SubTask::new(SubTaskType::Task(description), None)
                 },
@@ -211,7 +275,7 @@ You must select the most appropriate operations to complete a user's request.
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding read file subtask: {}", file_path)).expect("Failed to log");
+                    info!("Adding read file subtask: {}", file_path).expect("Failed to log");
                     
                     SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(file_path)), None)
                 },
@@ -223,7 +287,7 @@ You must select the most appropriate operations to complete a user's request.
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding read lookup subtask: {}", lookup_query)).expect("Failed to log");
+                    info!("Adding read lookup subtask: {}", lookup_query).expect("Failed to log");
                     
                     SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(lookup_query)), None)
                 },
@@ -235,7 +299,7 @@ You must select the most appropriate operations to complete a user's request.
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding update file subtask: {}", file_path)).expect("Failed to log");
+                    info!("Adding update file subtask: {}", file_path).expect("Failed to log");
                     
                     SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(file_path)), None)
                 },
@@ -247,7 +311,7 @@ You must select the most appropriate operations to complete a user's request.
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding update lookup subtask: {}", lookup_query)).expect("Failed to log");
+                    info!("Adding update lookup subtask: {}", lookup_query);
                     
                     SubTask::new(SubTaskType::Update(FilePathOrQuery::FileQuery(lookup_query)), None)
                 },
@@ -259,7 +323,7 @@ You must select the most appropriate operations to complete a user's request.
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding search subtask: {}", query)).expect("Failed to log");
+                    info!("Adding search subtask: {}", query);
                     
                     SubTask::new(SubTaskType::Search(query.to_string()), None)
                 },
@@ -271,7 +335,7 @@ You must select the most appropriate operations to complete a user's request.
                         .to_string();
                     
                     // Log it
-                    log::info(&format!("Adding bash subtask: {}", command)).expect("Failed to log");
+                    info!("Adding bash subtask: {}", command);
                     
                     SubTask::new(SubTaskType::Bash(command), None)
                 },
@@ -283,10 +347,10 @@ You must select the most appropriate operations to complete a user's request.
                         .to_string();
                     
                     if description.starts_with('/') || description.starts_with("./") {
-                        log::info(&format!("Adding legacy read file subtask: {}", description)).expect("Failed to log");
+                        info!("Adding legacy read file subtask: {}", description);
                         SubTask::new(SubTaskType::Read(FilePathOrQuery::FilePath(description)), None)
                     } else {
-                        log::info(&format!("Adding legacy read lookup subtask: {}", description)).expect("Failed to log");
+                        info!("Adding legacy read lookup subtask: {}", description);
                         SubTask::new(SubTaskType::Read(FilePathOrQuery::FileQuery(description)), None)
                     }
                 },
@@ -296,7 +360,7 @@ You must select the most appropriate operations to complete a user's request.
                         .ok_or_else(|| AgentError::AiApi("Missing description parameter".to_string()))?
                         .to_string();
                     
-                    log::info(&format!("Adding legacy update subtask: {}", description)).expect("Failed to log");
+                    info!("Adding legacy update subtask: {}", description);
                     
                     if description.starts_with('/') || description.starts_with("./") {
                         SubTask::new(SubTaskType::Update(FilePathOrQuery::FilePath(description)), None)
@@ -310,21 +374,21 @@ You must select the most appropriate operations to complete a user's request.
                         .ok_or_else(|| AgentError::AiApi("Missing description parameter".to_string()))?
                         .to_string();
                     
-                    log::info(&format!("Adding legacy search subtask: {}", description)).expect("Failed to log");
+                    info!("Adding legacy search subtask: {}", description);
                     
                     SubTask::new(SubTaskType::Search( description ), None)
                 },
                 
-                _ => return Err(AgentError::AiApi(format!("Unknown function: {}", function_name))),
+                _ => return None,
             };
             
             // Add the subtask to the queue
           //  self.add_queued_subtask(subtask);
 
+            // Extract the SubTaskType from the SubTask
+            let subtask_type = subtask.task_type;
 
-
-
-            return SubtaskOutput::PushSubtasksIncrementDepth (  vec![ subtask  ]    )
+            return Some(SubtaskOutput::PushSubtasksIncrementDepth(vec![subtask_type]))
 
 
   
@@ -351,14 +415,14 @@ impl SubtaskTool for ReadTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: Arc<AiClient>) -> Option<SubtaskOutput >  { 
+		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput >  { 
 
 
 
 
 
 
-
+                None
 
 
 		 }
@@ -383,7 +447,7 @@ impl SubtaskTool for BashTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: Arc<AiClient>) -> Option<SubtaskOutput > { 
+		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput > { 
 
 
 
@@ -391,7 +455,7 @@ impl SubtaskTool for BashTool {
 
 
 
-
+            None
 
 		 }
 
@@ -410,7 +474,7 @@ impl SubtaskTool for UpdateTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: Arc<AiClient>) -> Option<SubtaskOutput >  { 
+		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput >  { 
 
 
 
@@ -419,7 +483,7 @@ impl SubtaskTool for UpdateTool {
 
 
 
-
+            None
 		 }
 
 
@@ -437,7 +501,7 @@ impl SubtaskTool for SearchTool {
  
 
 
-		async fn handle_subtask(&self, ai_client: Arc<AiClient>) -> Option<SubtaskOutput >  { 
+		async fn handle_subtask(&self, ai_client: Arc<dyn AiClient>) -> Option<SubtaskOutput >  { 
 
 
 
@@ -446,7 +510,7 @@ impl SubtaskTool for SearchTool {
 
 
 
-
+            None 
 		 }
 
 
@@ -455,16 +519,6 @@ impl SubtaskTool for SearchTool {
 
 // --------------
 
-
-/// Read subtask variants
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FilePathOrQuery {
-    /// Read a specific file path
-    FilePath(String),
-    /// Look for a file matching a description
-    FileQuery(String),
-}
-
 impl fmt::Display for FilePathOrQuery {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -472,16 +526,6 @@ impl fmt::Display for FilePathOrQuery {
             FilePathOrQuery::FileQuery(query) => write!(f, "query: {}", query),
         }
     }
-}
- 
-/// The type of subtask
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SubTaskType {
-    Task(String),   // ???? 
-    Read(FilePathOrQuery),
-    Update(FilePathOrQuery),
-    Search(String),
-    Bash(String),
 }
 
 impl SubTaskType {

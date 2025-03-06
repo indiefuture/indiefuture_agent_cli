@@ -54,7 +54,7 @@ impl AgentEngine {
     /// Ask for user confirmation before executing a subtask
     pub async fn ask_user_confirmation(&self, subtask_type: SubTaskType) -> bool {
         // Display the subtask description
-        log::info(&format!("{} Operation: {}", 
+        cliclack::log::info(&format!("{} Operation: {}", 
             subtask_type.icon(),
             subtask_type.description()
         )).expect("Failed to log");
@@ -136,7 +136,7 @@ impl AgentEngine {
 
 
 
-			let Some( next_subtask)  = self.active_subtasks.last () {
+			if let Some( next_subtask)  = self.active_subtasks.last () {
 
 
 			}
@@ -152,7 +152,7 @@ impl AgentEngine {
 			match confirmed {
 
 				true =>  {
-					  log::info("✓ Operation approved").expect("Failed to log");
+					  cliclack::log::info("✓ Operation approved").expect("Failed to log");
 
 					    let spin = spinner();
     					spin.start("Processing task...");
@@ -160,7 +160,7 @@ impl AgentEngine {
 					   spin.stop("Task analyzed ✓");
 				}
 				false => {
-					log::info("⨯ Operation declined").expect("Failed to log");
+					cliclack::log::info("⨯ Operation declined").expect("Failed to log");
 					break
 				}
 			}
@@ -184,16 +184,9 @@ impl AgentEngine {
 
 
 pub enum SubtaskOutput {
-
-
-	PushSubtasksIncrementDepth,  // add subtasks in a deeper depth to try and grow context -- once those are all popped off and handled, we have more context to try again !  
-
-	SubtaskComplete (   ),  //we have enough context to do an AI Query or to move on  
-
+	PushSubtasksIncrementDepth(Vec<SubTaskType>),  // add subtasks in a deeper depth to try and grow context -- once those are all popped off and handled, we have more context to try again !  
+	SubtaskComplete(),  //we have enough context to do an AI Query or to move on  
 	//SubtaskFailed, // we are giving up . when would this happen ? 
-
-
-
 }
 
 

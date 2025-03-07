@@ -2,7 +2,7 @@
 
 An AI-powered CLI agent that can listen for commands, break them down into subtasks, and execute them with context from your local codebase.
 
-
+Requires an openAI API key in ENV.   
 
 
 ### TRY ME 
@@ -22,7 +22,9 @@ it will :D
 
 
 
+CHAT 
 
+https://discord.gg/nhS9hkJM4z
 
 
 
@@ -32,11 +34,9 @@ it will :D
 
 - Interactive CLI interface using cliclack
 - Task decomposition into manageable subtasks
-- Parallel task execution with dependency management
-- Code scanning and analysis for context-enriched AI queries
-- Memory management with both short-term and long-term storage
+- Sequential task execution with dependency management 
 - Integration with OpenAI and Claude APIs
-- Vector storage for semantic code search
+- Simple memory storage for semantic code search (prob can be improved ! ) 
 
 ## Requirements
 
@@ -78,10 +78,8 @@ cargo run
 
 ## Example Tasks
 
-- "Analyze this codebase and create a UML diagram"
-- "Find all TODO comments and create GitHub issues for them"
-- "Refactor the error handling in the src/utils directory"
-- "Write unit tests for the Parser class"
+- "Tell me about this project"
+ 
  
 ## License
 
